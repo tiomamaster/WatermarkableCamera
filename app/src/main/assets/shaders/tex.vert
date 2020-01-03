@@ -1,5 +1,3 @@
-#version 120
-
 // position
 attribute vec4 aPosition;
 attribute vec4 aTexCoordinate;

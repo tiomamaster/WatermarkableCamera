@@ -13,12 +13,12 @@ import java.nio.FloatBuffer
 import java.nio.ShortBuffer
 import android.opengl.GLES20 as gl2
 
-class Renderer(private val context: Context, private val listener: StateListener) :
-    RecordableSurfaceView.RendererCallbacks,
-    SurfaceTexture.OnFrameAvailableListener {
+class Renderer(
+    private val context: Context,
+    private val listener: StateListener
+) : RecordableSurfaceView.RendererCallbacks {
 
     override fun onSurfaceCreated() {
-        cleanupGlComponents()
         initGlComponents()
     }
 
@@ -39,7 +39,6 @@ class Renderer(private val context: Context, private val listener: StateListener
     override fun onDrawFrame() {
         gl2.glEnable(gl2.GL_BLEND)
         gl2.glBlendFunc(gl2.GL_ONE, gl2.GL_ONE_MINUS_SRC_ALPHA)
-        gl2.glUseProgram(program)
 
         val mvpMatrix = FloatArray(16)
         Matrix.orthoM(
@@ -54,34 +53,54 @@ class Renderer(private val context: Context, private val listener: StateListener
         )
         drawCamera(mvpMatrix)
 
-        Matrix.orthoM(
-            mvpMatrix,
-            0,
-            -1f,
-            1f,
-            -1f,
-            1f,
-            -1f,
-            1f
-        )
-        drawWatermark(mvpMatrix)
+//        Matrix.orthoM(
+//            mvpMatrix,
+//            0,
+//            -1f,
+//            1f,
+//            -1f,
+//            1f,
+//            -1f,
+//            1f
+//        )
+//        drawWatermark(mvpMatrix)
     }
 
     private fun drawCamera(mvpMatrix: FloatArray) {
+        if (needUpdateCameraTexture) {
+            cameraSurfaceTexture.updateTexImage()
+            needUpdateCameraTexture = false
+        }
+
         gl2.glUniformMatrix4fv(textureTransformHandle, 1, false, cameraTransformMatrix, 0)
 
         gl2.glActiveTexture(gl2.GL_TEXTURE0)
-        gl2.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureIds[0])
+        withGlErrorChecking("Bind camera texture") {
+            gl2.glBindTexture(
+                GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                textureIds[0]
+            )
+        }
         gl2.glUniform1i(textureHandle, 0)
 
         draw(mvpMatrix)
     }
 
     private fun drawWatermark(mvpMatrix: FloatArray) {
+        if (needUpdateWatermarkTexture) {
+            watermarkSurfaceTexture.updateTexImage()
+            needUpdateWatermarkTexture = false
+        }
+
         gl2.glUniformMatrix4fv(textureTransformHandle, 1, false, watermarkTransformMatrix, 0)
 
         gl2.glActiveTexture(gl2.GL_TEXTURE1)
-        gl2.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureIds[1])
+        withGlErrorChecking("Bind watermark texture") {
+            gl2.glBindTexture(
+                GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                textureIds[1]
+            )
+        }
         gl2.glUniform1i(textureHandle, 1)
 
         draw(mvpMatrix)
@@ -120,30 +139,27 @@ class Renderer(private val context: Context, private val listener: StateListener
         gl2.glDisableVertexAttribArray(textureCoordinateHandle)
     }
 
+    private var needUpdateCameraTexture = false
     val cameraSurfaceTexture: SurfaceTexture by lazy(LazyThreadSafetyMode.NONE) {
-        SurfaceTexture(
-            textureIds[0]
-        ).apply {
-            setOnFrameAvailableListener(this@Renderer)
+        SurfaceTexture(textureIds[0]).apply {
+            setOnFrameAvailableListener {
+                needUpdateCameraTexture = true
+                getTransformMatrix(cameraTransformMatrix)
+            }
         }
     }
     private val cameraTransformMatrix = FloatArray(16)
 
+    private var needUpdateWatermarkTexture = false
     val watermarkSurfaceTexture: SurfaceTexture by lazy(LazyThreadSafetyMode.NONE) {
-        SurfaceTexture(
-            textureIds[0]
-        ).apply {
-            setOnFrameAvailableListener(this@Renderer)
+        SurfaceTexture(textureIds[1]).apply {
+            setOnFrameAvailableListener {
+                needUpdateWatermarkTexture = true
+                getTransformMatrix(watermarkTransformMatrix)
+            }
         }
     }
     private val watermarkTransformMatrix = FloatArray(16)
-
-    override fun onFrameAvailable(surfaceTexture: SurfaceTexture?) {
-        surfaceTexture?.updateTexImage()
-
-        cameraSurfaceTexture.getTransformMatrix(cameraTransformMatrix)
-        watermarkSurfaceTexture.getTransformMatrix(watermarkTransformMatrix)
-    }
 
     private fun initGlComponents() {
         setupTextures()
@@ -153,35 +169,27 @@ class Renderer(private val context: Context, private val listener: StateListener
     }
 
     private fun cleanupGlComponents() {
-        gl2.glDeleteTextures(2, textureIds, 0)
-        gl2.glDeleteProgram(program)
+        withGlErrorChecking("Delete textures") {
+            gl2.glDeleteTextures(
+                textureIds.size,
+                textureIds,
+                0
+            )
+        }
+        withGlErrorChecking("Delete program") { gl2.glDeleteProgram(program) }
     }
 
     private val textureIds = IntArray(2)
 
     private fun setupTextures() {
         withGlErrorChecking("Texture generate") {
-            gl2.glGenTextures(2, textureIds, 0)
+            gl2.glGenTextures(
+                textureIds.size,
+                textureIds,
+                0
+            )
         }
-
-        // TODO: ???
-//        setupCameraTexture()
-//        setupWatermarkTexture()
     }
-
-//    private fun setupCameraTexture() {
-//        withGlErrorChecking("Camera texture bind") {
-//            gl2.glActiveTexture(gl2.GL_TEXTURE0)
-//            gl2.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureIds[0])
-//        }
-//    }
-//
-//    private fun setupWatermarkTexture() {
-//        withGlErrorChecking("Watermark texture bind") {
-//            gl2.glActiveTexture(gl2.GL_TEXTURE1)
-//            gl2.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureIds[1])
-//        }
-//    }
 
     private var program = 0
 
@@ -189,12 +197,9 @@ class Renderer(private val context: Context, private val listener: StateListener
         fun compileShader(type: Int): Int {
             val (path, operation) =
                 if (type == gl2.GL_VERTEX_SHADER) {
-                    Pair(
-                        VERTEX_SHADER_PATH,
-                        "Vertex shader compile"
-                    )
+                    VERTEX_SHADER_PATH to "Vertex shader compile"
                 } else {
-                    Pair(FRAGMENT_SHADER_PATH, "Fragment shader compile")
+                    FRAGMENT_SHADER_PATH to "Fragment shader compile"
                 }
             val shaderCode =
                 context.assets.open(path).reader().use(InputStreamReader::readText)
@@ -215,6 +220,7 @@ class Renderer(private val context: Context, private val listener: StateListener
             gl2.glLinkProgram(program)
         }
         verifyProgram()
+        gl2.glUseProgram(program)
         setupHandlers()
     }
 
@@ -263,12 +269,14 @@ class Renderer(private val context: Context, private val listener: StateListener
         const val VERTEX_SHADER_PATH = "shaders/tex.vert"
         const val FRAGMENT_SHADER_PATH = "shaders/tex.frag"
 
-        fun floatArrayToBuffer(array: FloatArray): FloatBuffer = ByteBuffer.allocate(array.size * 4)
+        fun floatArrayToBuffer(array: FloatArray): FloatBuffer = ByteBuffer
+            .allocateDirect(array.size * 4)
             .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
             .put(array).apply { position(0) }
 
-        fun shortArrayToBuffer(array: ShortArray): ShortBuffer = ByteBuffer.allocate(array.size * 2)
+        fun shortArrayToBuffer(array: ShortArray): ShortBuffer = ByteBuffer
+            .allocateDirect(array.size * 2)
             .order(ByteOrder.nativeOrder())
             .asShortBuffer()
             .put(array).apply { position(0) }
