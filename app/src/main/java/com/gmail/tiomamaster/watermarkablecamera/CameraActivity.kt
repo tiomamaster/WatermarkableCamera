@@ -42,10 +42,12 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
     override fun onPause() {
         super.onPause()
-        rsv.pause()
-        rsv.rendererCallbacks = null
         closeCamera()
         stopBackgroundThread()
+        renderer.cameraSurfaceTexture?.release()
+        renderer.watermarkSurfaceTexture?.release()
+        rsv.rendererCallbacks = null
+        rsv.pause()
     }
 
     private var backgroundThread: HandlerThread? = null
@@ -163,11 +165,12 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             captureRequestBuilder =
                 cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
 
-            renderer.cameraSurfaceTexture.setDefaultBufferSize(
+            renderer.setupSurfaceTextures(
                 previewSize.width,
-                previewSize.height
+                previewSize.height,
+                rsv.width,
+                rsv.height
             )
-            renderer.watermarkSurfaceTexture.setDefaultBufferSize(rsv.width, rsv.height)
 
             val surface = Surface(renderer.cameraSurfaceTexture)
             captureRequestBuilder.addTarget(surface)
@@ -247,8 +250,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         ) openCamera()
     }
 
-    override fun onRendererFinished() {
-    }
+    override fun onRendererFinished() = Unit
 
     private companion object {
 

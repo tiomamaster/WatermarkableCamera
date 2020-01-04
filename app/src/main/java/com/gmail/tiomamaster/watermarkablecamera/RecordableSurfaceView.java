@@ -531,8 +531,7 @@ public class RecordableSurfaceView extends SurfaceView {
 
                         if (mRendererCallbacksWeakReference != null
                                 && mRendererCallbacksWeakReference.get() != null) {
-                            mRendererCallbacksWeakReference.get()
-                                    .onSurfaceChanged(mWidth, mHeight);
+                            mRendererCallbacksWeakReference.get().onSurfaceChanged(mWidth, mHeight);
                         }
 
                         mSizeChange.set(false);

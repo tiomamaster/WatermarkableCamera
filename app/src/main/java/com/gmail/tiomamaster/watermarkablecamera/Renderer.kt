@@ -1,5 +1,6 @@
 package com.gmail.tiomamaster.watermarkablecamera
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.SurfaceTexture
 import android.opengl.GLES11Ext
@@ -66,9 +67,35 @@ class Renderer(
 //        drawWatermark(mvpMatrix)
     }
 
+    @SuppressLint("Recycle")
+    fun setupSurfaceTextures(canWidth: Int, camHeight: Int, waterWidth: Int, waterHeight: Int) {
+        cameraSurfaceTexture = SurfaceTexture(textureIds[0]).apply {
+            setDefaultBufferSize(canWidth, camHeight)
+            setOnFrameAvailableListener {
+                needUpdateCameraTexture = true
+                getTransformMatrix(cameraTransformMatrix)
+            }
+        }
+        watermarkSurfaceTexture = SurfaceTexture(textureIds[1]).apply {
+            setDefaultBufferSize(waterWidth, waterHeight)
+            setOnFrameAvailableListener {
+                needUpdateWatermarkTexture = true
+                getTransformMatrix(watermarkTransformMatrix)
+            }
+        }
+    }
+
+    var cameraSurfaceTexture: SurfaceTexture? = null
+    private var needUpdateCameraTexture = false
+    private val cameraTransformMatrix = FloatArray(16)
+
+    var watermarkSurfaceTexture: SurfaceTexture? = null
+    private var needUpdateWatermarkTexture = false
+    private val watermarkTransformMatrix = FloatArray(16)
+
     private fun drawCamera(mvpMatrix: FloatArray) {
         if (needUpdateCameraTexture) {
-            cameraSurfaceTexture.updateTexImage()
+            cameraSurfaceTexture?.updateTexImage()
             needUpdateCameraTexture = false
         }
 
@@ -88,7 +115,7 @@ class Renderer(
 
     private fun drawWatermark(mvpMatrix: FloatArray) {
         if (needUpdateWatermarkTexture) {
-            watermarkSurfaceTexture.updateTexImage()
+            watermarkSurfaceTexture?.updateTexImage()
             needUpdateWatermarkTexture = false
         }
 
@@ -138,28 +165,6 @@ class Renderer(
         gl2.glDisableVertexAttribArray(positionHandle)
         gl2.glDisableVertexAttribArray(textureCoordinateHandle)
     }
-
-    private var needUpdateCameraTexture = false
-    val cameraSurfaceTexture: SurfaceTexture by lazy(LazyThreadSafetyMode.NONE) {
-        SurfaceTexture(textureIds[0]).apply {
-            setOnFrameAvailableListener {
-                needUpdateCameraTexture = true
-                getTransformMatrix(cameraTransformMatrix)
-            }
-        }
-    }
-    private val cameraTransformMatrix = FloatArray(16)
-
-    private var needUpdateWatermarkTexture = false
-    val watermarkSurfaceTexture: SurfaceTexture by lazy(LazyThreadSafetyMode.NONE) {
-        SurfaceTexture(textureIds[1]).apply {
-            setOnFrameAvailableListener {
-                needUpdateWatermarkTexture = true
-                getTransformMatrix(watermarkTransformMatrix)
-            }
-        }
-    }
-    private val watermarkTransformMatrix = FloatArray(16)
 
     private fun initGlComponents() {
         setupTextures()
