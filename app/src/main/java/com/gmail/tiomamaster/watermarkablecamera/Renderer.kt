@@ -8,6 +8,7 @@ import android.opengl.GLUtils
 import android.opengl.Matrix
 import android.util.Log
 import java.io.InputStreamReader
+import java.lang.ref.WeakReference
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -16,11 +17,16 @@ import android.opengl.GLES20 as gl2
 
 class Renderer(
     private val context: Context,
-    private val listener: StateListener
+    listener: StateListener
 ) : RecordableSurfaceView.RendererCallbacks {
+
+    private val listener = WeakReference(listener)
+
+    var ready = false
 
     override fun onSurfaceCreated() {
         initGlComponents()
+        ready = true
     }
 
     override fun onSurfaceChanged(width: Int, height: Int) {
@@ -29,6 +35,7 @@ class Renderer(
 
     override fun onSurfaceDestroyed() {
         cleanupGlComponents()
+        ready = false
     }
 
     override fun onContextCreated() = Unit
@@ -83,6 +90,11 @@ class Renderer(
                 getTransformMatrix(watermarkTransformMatrix)
             }
         }
+    }
+
+    fun releaseSurfaceTextures() {
+        cameraSurfaceTexture?.release()
+        watermarkSurfaceTexture?.release()
     }
 
     var cameraSurfaceTexture: SurfaceTexture? = null
@@ -170,7 +182,7 @@ class Renderer(
         setupTextures()
         createProgram()
 
-        listener.onRendererReady()
+        listener.get()?.onRendererReady()
     }
 
     private fun cleanupGlComponents() {

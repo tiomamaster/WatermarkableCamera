@@ -31,22 +31,22 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         setContentView(R.layout.activity_camera)
 
         renderer = Renderer(applicationContext, this)
+        rsv.rendererCallbacks = renderer
     }
 
     override fun onResume() {
         super.onResume()
         startBackgroundThread()
-        rsv.rendererCallbacks = renderer
         rsv.resume()
+
+        if (renderer.ready) openCamera()
     }
 
     override fun onPause() {
         super.onPause()
         closeCamera()
         stopBackgroundThread()
-        renderer.cameraSurfaceTexture?.release()
-        renderer.watermarkSurfaceTexture?.release()
-        rsv.rendererCallbacks = null
+        renderer.releaseSurfaceTextures()
         rsv.pause()
     }
 
@@ -257,8 +257,8 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         val TAG = CameraActivity::class.java.simpleName
 
         const val REQUEST_CODE_CAMERA = 0xCA
-        const val WIDTH = 720
 
+        const val WIDTH = 720
         const val HEIGHT = 1280
     }
 }
