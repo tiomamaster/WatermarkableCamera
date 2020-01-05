@@ -54,12 +54,17 @@ class Renderer(
             0,
             -screenToPreviewAspectRatio,
             screenToPreviewAspectRatio,
-            -1f,
-            1f,
+            -1.0f,
+            1.0f,
             -1f,
             1f
         )
-        drawCamera(mvpMatrix)
+        val rotateMatrix = FloatArray(16)
+        Matrix.setIdentityM(rotateMatrix, 0)
+        Matrix.rotateM(rotateMatrix, 0, -90f, 0f, 0f, 1f)
+        val m = FloatArray(16)
+        Matrix.multiplyMM(m, 0, rotateMatrix, 0, mvpMatrix, 0)
+        drawCamera(m)
 
 //        Matrix.orthoM(
 //            mvpMatrix,

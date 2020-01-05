@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
-import android.media.MediaRecorder
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
@@ -92,19 +91,27 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             val configurationMap =
                 characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
                     ?: throw RuntimeException("Cannot get available preview/video sizes")
-//        val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
-            val videoSize =
-                chooseVideoSize(configurationMap.getOutputSizes(MediaRecorder::class.java))
-            previewSize = choosePreviewSize(
+//            val sensorOrientation =
+//                characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+//            val videoSize =
+//                chooseVideoSize(configurationMap.getOutputSizes(MediaRecorder::class.java))
+//            previewSize = choosePreviewSize(
+//                configurationMap.getOutputSizes(SurfaceTexture::class.java),
+//                WIDTH,
+//                HEIGHT,
+//                videoSize
+//            )
+
+            val (w, h) = if (rsv.width < rsv.height) rsv.width to rsv.height else rsv.height to rsv.width
+            previewSize = getOptimalPreviewSize(
                 configurationMap.getOutputSizes(SurfaceTexture::class.java),
-                WIDTH,
-                HEIGHT,
-                videoSize
+                w, h
             )
 
-            val screenAsp = rsv.width * 1.0f / rsv.height
+            val screenAsp =
+                if (rsv.width < rsv.height) rsv.width * 1.0f / rsv.height else rsv.height * 1.0f / rsv.width
             val previewAsp = previewSize.height * 1.0f / previewSize.width
-            val screenToPreviewAsp = screenAsp / previewAsp
+            val screenToPreviewAsp = if (screenAsp < previewAsp) screenAsp / previewAsp else previewAsp / screenAsp
             renderer.screenToPreviewAspectRatio = screenToPreviewAsp
 
             cameraManager.openCamera(cameraId, cameraStateCallback, backgroundHandler)
@@ -201,6 +208,18 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         override fun onConfigureFailed(session: CameraCaptureSession) = Unit
     }
 
+    private val videoFilePath: String
+        get() {
+            val filename = "${System.currentTimeMillis()}.mp4"
+            val dir = getExternalFilesDir(null)
+
+            return if (dir == null) {
+                filename
+            } else {
+                "${dir.absolutePath}/$filename"
+            }
+        }
+
     private fun chooseVideoSize(choices: Array<Size>) = choices.firstOrNull {
         it.width == it.height * 4 / 3 && it.width <= 1080
     } ?: choices[choices.size - 1]
@@ -231,9 +250,46 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         }
     }
 
+    private fun getOptimalPreviewSize(sizes: Array<Size>, w: Int, h: Int): Size {
+        val ASPECT_TOLERANCE = 0.001
+        val targetRatio = w.toDouble() / h
+        val allSizes: List<Size> = sizes.asList()
+        val comparator =
+            Comparator<Size> { lhs, rhs ->
+                signum(lhs.width.toLong() * lhs.height - rhs.width.toLong() * rhs.height)
+            }
+        Collections.sort(allSizes, comparator)
+        var optimalSize: Size? = null
+        var minDiff = Double.MAX_VALUE
+        for (size in allSizes) {
+            val ratio = size.width.toDouble() / size.height
+            if (Math.abs(ratio - targetRatio) > ASPECT_TOLERANCE) {
+                continue
+            }
+            if (Math.abs(size.width - w) < minDiff) {
+                optimalSize = size
+                minDiff = Math.abs(size.width - w).toDouble()
+            }
+        }
+        if (optimalSize == null) {
+            minDiff = Double.MAX_VALUE
+            for (size in allSizes) {
+                if (Math.abs(size.width - w) < minDiff) {
+                    optimalSize = size
+                    minDiff = Math.abs(size.width - w).toDouble()
+                }
+            }
+        }
+        return optimalSize!!
+    }
+
+    private val hasPermissions: Boolean
+        get() = PERMISSIONS.map { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+            .reduce { acc, b -> acc && b }
+
     private fun checkAndRequestPermissions(): Boolean =
-        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_DENIED) {
-            requestPermissions(arrayOf(Manifest.permission.CAMERA), REQUEST_CODE_CAMERA)
+        if (!hasPermissions) {
+            requestPermissions(PERMISSIONS, REQUEST_CODE_PERMISSIONS)
             false
         } else {
             true
@@ -245,9 +301,10 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_CODE_CAMERA && grantResults.isNotEmpty() &&
-            grantResults[0] == PackageManager.PERMISSION_GRANTED
-        ) openCamera()
+        if (requestCode == REQUEST_CODE_PERMISSIONS && grantResults.size > 1 &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED &&
+            grantResults[1] == PackageManager.PERMISSION_GRANTED
+        ) openCamera() else finish()
     }
 
     override fun onRendererFinished() = Unit
@@ -256,7 +313,8 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
         val TAG = CameraActivity::class.java.simpleName
 
-        const val REQUEST_CODE_CAMERA = 0xCA
+        val PERMISSIONS = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+        const val REQUEST_CODE_PERMISSIONS = 0xCA
 
         const val WIDTH = 720
         const val HEIGHT = 1280
