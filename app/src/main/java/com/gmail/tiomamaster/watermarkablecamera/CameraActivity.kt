@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
-import android.media.MediaRecorder
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
@@ -16,6 +15,7 @@ import android.view.Surface
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import kotlinx.android.synthetic.main.activity_camera.*
+import java.io.File
 import java.lang.Long.signum
 import java.util.*
 import java.util.concurrent.Semaphore
@@ -34,12 +34,14 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         rsv.rendererCallbacks = renderer
     }
 
+    private val cameraOpenCloseLock = Semaphore(1)
+
     override fun onResume() {
         super.onResume()
         startBackgroundThread()
         rsv.resume()
 
-        if (renderer.ready) openCamera()
+        if (renderer.ready && cameraOpenCloseLock.availablePermits() == 1) openCamera()
     }
 
     override fun onPause() {
@@ -74,9 +76,6 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         runOnUiThread { openCamera() }
     }
 
-    private lateinit var previewSize: Size
-    private val cameraOpenCloseLock = Semaphore(1)
-
     @SuppressLint("MissingPermission")
     private fun openCamera() {
         if (!checkAndRequestPermissions()) return
@@ -92,22 +91,17 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             val configurationMap =
                 characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
                     ?: throw RuntimeException("Cannot get available preview/video sizes")
-//            val sensorOrientation =
-//                characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
-            val videoSize =
-                chooseVideoSize(configurationMap.getOutputSizes(MediaRecorder::class.java))
-            previewSize = choosePreviewSize(
+            val previewSize = choosePreviewSize(
                 configurationMap.getOutputSizes(SurfaceTexture::class.java),
-                WIDTH,
-                HEIGHT,
-                videoSize
+                rsv.width,
+                rsv.height
             )
-
-//            val (w, h) = if (rsv.width < rsv.height) rsv.width to rsv.height else rsv.height to rsv.width
-//            previewSize = getOptimalPreviewSize(
-//                configurationMap.getOutputSizes(SurfaceTexture::class.java),
-//                w, h
-//            )
+            renderer.setupSurfaceTextures(
+                previewSize.width,
+                previewSize.height,
+                rsv.width,
+                rsv.height
+            )
 
             val screenAsp = if (rsv.width < rsv.height) rsv.width * 1.0f / rsv.height
             else rsv.height * 1.0f / rsv.width
@@ -178,13 +172,6 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             captureRequestBuilder =
                 cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
 
-            renderer.setupSurfaceTextures(
-                previewSize.width,
-                previewSize.height,
-                rsv.width,
-                rsv.height
-            )
-
             val surface = Surface(renderer.cameraSurfaceTexture)
             captureRequestBuilder.addTarget(surface)
             cameraDevice?.createCaptureSession(
@@ -226,22 +213,15 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             }
         }
 
-    private fun chooseVideoSize(choices: Array<Size>) = choices.firstOrNull {
-        it.width == it.height * 4 / 3 && it.width <= 1080
-    } ?: choices[choices.size - 1]
-
     @Suppress("SameParameterValue")
     private fun choosePreviewSize(
         choices: Array<Size>,
         width: Int,
-        height: Int,
-        aspectRatio: Size
+        height: Int
     ): Size {
         // Collect the supported resolutions that are at least as big as the preview Surface
-        val w = aspectRatio.width
-        val h = aspectRatio.height
         val bigEnough = choices.filter {
-            it.height == it.width * h / w && it.width >= width && it.height >= height
+            it.height == it.width * height / width && it.width >= width && it.height >= height
         }
 
         // Pick the smallest of those, assuming we found any
@@ -256,42 +236,8 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         }
     }
 
-    private fun getOptimalPreviewSize(sizes: Array<Size>, w: Int, h: Int): Size {
-        val ASPECT_TOLERANCE = 0.001
-        val targetRatio = w.toDouble() / h
-        val allSizes: List<Size> = sizes.asList()
-        val comparator =
-            Comparator<Size> { lhs, rhs ->
-                signum(lhs.width.toLong() * lhs.height - rhs.width.toLong() * rhs.height)
-            }
-        Collections.sort(allSizes, comparator)
-        var optimalSize: Size? = null
-        var minDiff = Double.MAX_VALUE
-        for (size in allSizes) {
-            val ratio = size.width.toDouble() / size.height
-            if (Math.abs(ratio - targetRatio) > ASPECT_TOLERANCE) {
-                continue
-            }
-            if (Math.abs(size.width - w) < minDiff) {
-                optimalSize = size
-                minDiff = Math.abs(size.width - w).toDouble()
-            }
-        }
-        if (optimalSize == null) {
-            minDiff = Double.MAX_VALUE
-            for (size in allSizes) {
-                if (Math.abs(size.width - w) < minDiff) {
-                    optimalSize = size
-                    minDiff = Math.abs(size.width - w).toDouble()
-                }
-            }
-        }
-        return optimalSize!!
-    }
-
     private val hasPermissions: Boolean
-        get() = PERMISSIONS.map { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
-            .reduce { acc, b -> acc && b }
+        get() = PERMISSIONS.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
 
     private fun checkAndRequestPermissions(): Boolean =
         if (!hasPermissions) {

@@ -60,8 +60,10 @@ class Renderer(
             -1f,
             1f
         )
-        val rotateMatrix = FloatArray(16).apply { Matrix.setIdentityM(this, 0) }
-        Matrix.rotateM(rotateMatrix, 0, rotation, 0f, 0f, 1f)
+        val rotateMatrix = FloatArray(16).apply {
+            Matrix.setIdentityM(this, 0)
+            Matrix.rotateM(this, 0, rotation, 0f, 0f, 1f)
+        }
         val mvpMatrix = FloatArray(16)
         Matrix.multiplyMM(mvpMatrix, 0, rotateMatrix, 0, orthoMatrix, 0)
         drawCamera(mvpMatrix)
