@@ -24,6 +24,53 @@ class Renderer(
 
     var ready = false
 
+    var screenToPreviewAsp = 1f
+    var rotation = 0f
+
+    var cameraSurfaceTexture: SurfaceTexture? = null
+    private var needUpdateCameraTexture = false
+    private val cameraTransformMatrix = FloatArray(16)
+
+    var watermarkSurfaceTexture: SurfaceTexture? = null
+    private var needUpdateWatermarkTexture = false
+    private val watermarkTransformMatrix = FloatArray(16)
+
+    private val textureIds = IntArray(2)
+
+    private var program = 0
+
+    private var positionHandle = 0
+    private var textureCoordinateHandle = 0
+    private var positionMatrixHandle = 0
+    private var textureTransformHandle = 0
+    private var textureHandle = 0
+
+    /**
+     * This function has to be called from the camera thread.
+     */
+    @SuppressLint("Recycle")
+    fun setupSurfaceTextures(camWidth: Int, camHeight: Int, waterWidth: Int, waterHeight: Int) {
+        cameraSurfaceTexture = SurfaceTexture(textureIds[0]).apply {
+            setDefaultBufferSize(camWidth, camHeight)
+            setOnFrameAvailableListener {
+                needUpdateCameraTexture = true
+                getTransformMatrix(cameraTransformMatrix)
+            }
+        }
+        watermarkSurfaceTexture = SurfaceTexture(textureIds[1]).apply {
+            setDefaultBufferSize(waterWidth, waterHeight)
+            setOnFrameAvailableListener {
+                needUpdateWatermarkTexture = true
+                getTransformMatrix(watermarkTransformMatrix)
+            }
+        }
+    }
+
+    fun releaseSurfaceTextures() {
+        cameraSurfaceTexture?.release()
+        watermarkSurfaceTexture?.release()
+    }
+
     override fun onSurfaceCreated() {
         initGlComponents()
         ready = true
@@ -38,12 +85,86 @@ class Renderer(
         ready = false
     }
 
+    private fun initGlComponents() {
+        setupTextures()
+        createProgram()
+
+        listener.get()?.onRendererReady()
+    }
+
+    private fun setupTextures() {
+        withGlErrorChecking("Texture generate") {
+            gl2.glGenTextures(
+                textureIds.size,
+                textureIds,
+                0
+            )
+        }
+    }
+
+    private fun createProgram() {
+        fun compileShader(type: Int): Int {
+            val (path, operation) =
+                if (type == gl2.GL_VERTEX_SHADER) {
+                    VERTEX_SHADER_PATH to "Vertex shader compile"
+                } else {
+                    FRAGMENT_SHADER_PATH to "Fragment shader compile"
+                }
+            val shaderCode =
+                context.assets.open(path).reader().use(InputStreamReader::readText)
+            val shaderHandle = gl2.glCreateShader(type)
+            gl2.glShaderSource(shaderHandle, shaderCode)
+            withGlErrorChecking(operation) {
+                gl2.glCompileShader(shaderHandle)
+            }
+            return shaderHandle
+        }
+
+        val vertexShaderHandle = compileShader(gl2.GL_VERTEX_SHADER)
+        val fragmentShaderHandle = compileShader(gl2.GL_FRAGMENT_SHADER)
+        program = gl2.glCreateProgram()
+        gl2.glAttachShader(program, vertexShaderHandle)
+        gl2.glAttachShader(program, fragmentShaderHandle)
+        withGlErrorChecking("Shader program link") {
+            gl2.glLinkProgram(program)
+        }
+        verifyProgram()
+        gl2.glUseProgram(program)
+        setupHandlers()
+    }
+
+    private fun verifyProgram() {
+        if (!BuildConfig.DEBUG) return
+        with(IntArray(1)) {
+            gl2.glGetProgramiv(program, gl2.GL_LINK_STATUS, this, 0)
+            if (get(0) != gl2.GL_TRUE) {
+                Log.e(TAG, "Error while linking a program:\n${gl2.glGetProgramInfoLog(program)}")
+            }
+        }
+    }
+
+    private fun setupHandlers() {
+        positionHandle = gl2.glGetAttribLocation(program, "aPosition")
+        textureCoordinateHandle = gl2.glGetAttribLocation(program, "aTexCoordinate")
+        positionMatrixHandle = gl2.glGetUniformLocation(program, "uMVPMatrix")
+        textureTransformHandle = gl2.glGetUniformLocation(program, "uTextureTransform")
+        textureHandle = gl2.glGetUniformLocation(program, "sTexture")
+    }
+
+    private fun cleanupGlComponents() {
+        withGlErrorChecking("Delete textures") {
+            gl2.glDeleteTextures(
+                textureIds.size,
+                textureIds,
+                0
+            )
+        }
+        withGlErrorChecking("Delete program") { gl2.glDeleteProgram(program) }
+    }
+
     override fun onContextCreated() = Unit
 
     override fun onPreDrawFrame() = Unit
-
-    var screenToPreviewAsp = 1f
-    var rotation = 0f
 
     override fun onDrawFrame() {
         gl2.glEnable(gl2.GL_BLEND)
@@ -80,37 +201,6 @@ class Renderer(
 //        )
 //        drawWatermark(mvpMatrix)
     }
-
-    @SuppressLint("Recycle")
-    fun setupSurfaceTextures(canWidth: Int, camHeight: Int, waterWidth: Int, waterHeight: Int) {
-        cameraSurfaceTexture = SurfaceTexture(textureIds[0]).apply {
-            setDefaultBufferSize(canWidth, camHeight)
-            setOnFrameAvailableListener {
-                needUpdateCameraTexture = true
-                getTransformMatrix(cameraTransformMatrix)
-            }
-        }
-        watermarkSurfaceTexture = SurfaceTexture(textureIds[1]).apply {
-            setDefaultBufferSize(waterWidth, waterHeight)
-            setOnFrameAvailableListener {
-                needUpdateWatermarkTexture = true
-                getTransformMatrix(watermarkTransformMatrix)
-            }
-        }
-    }
-
-    fun releaseSurfaceTextures() {
-        cameraSurfaceTexture?.release()
-        watermarkSurfaceTexture?.release()
-    }
-
-    var cameraSurfaceTexture: SurfaceTexture? = null
-    private var needUpdateCameraTexture = false
-    private val cameraTransformMatrix = FloatArray(16)
-
-    var watermarkSurfaceTexture: SurfaceTexture? = null
-    private var needUpdateWatermarkTexture = false
-    private val watermarkTransformMatrix = FloatArray(16)
 
     private fun drawCamera(mvpMatrix: FloatArray) {
         if (needUpdateCameraTexture) {
@@ -185,99 +275,12 @@ class Renderer(
         gl2.glDisableVertexAttribArray(textureCoordinateHandle)
     }
 
-    private fun initGlComponents() {
-        setupTextures()
-        createProgram()
-
-        listener.get()?.onRendererReady()
-    }
-
-    private fun cleanupGlComponents() {
-        withGlErrorChecking("Delete textures") {
-            gl2.glDeleteTextures(
-                textureIds.size,
-                textureIds,
-                0
-            )
-        }
-        withGlErrorChecking("Delete program") { gl2.glDeleteProgram(program) }
-    }
-
-    private val textureIds = IntArray(2)
-
-    private fun setupTextures() {
-        withGlErrorChecking("Texture generate") {
-            gl2.glGenTextures(
-                textureIds.size,
-                textureIds,
-                0
-            )
-        }
-    }
-
-    private var program = 0
-
-    private fun createProgram() {
-        fun compileShader(type: Int): Int {
-            val (path, operation) =
-                if (type == gl2.GL_VERTEX_SHADER) {
-                    VERTEX_SHADER_PATH to "Vertex shader compile"
-                } else {
-                    FRAGMENT_SHADER_PATH to "Fragment shader compile"
-                }
-            val shaderCode =
-                context.assets.open(path).reader().use(InputStreamReader::readText)
-            val shaderHandle = gl2.glCreateShader(type)
-            gl2.glShaderSource(shaderHandle, shaderCode)
-            withGlErrorChecking(operation) {
-                gl2.glCompileShader(shaderHandle)
-            }
-            return shaderHandle
-        }
-
-        val vertexShaderHandle = compileShader(gl2.GL_VERTEX_SHADER)
-        val fragmentShaderHandle = compileShader(gl2.GL_FRAGMENT_SHADER)
-        program = gl2.glCreateProgram()
-        gl2.glAttachShader(program, vertexShaderHandle)
-        gl2.glAttachShader(program, fragmentShaderHandle)
-        withGlErrorChecking("Shader program link") {
-            gl2.glLinkProgram(program)
-        }
-        verifyProgram()
-        gl2.glUseProgram(program)
-        setupHandlers()
-    }
-
-    private var positionHandle = 0
-    private var textureCoordinateHandle = 0
-    private var positionMatrixHandle = 0
-    private var textureTransformHandle = 0
-    private var textureHandle = 0
-
-    private fun setupHandlers() {
-        positionHandle = gl2.glGetAttribLocation(program, "aPosition")
-        textureCoordinateHandle = gl2.glGetAttribLocation(program, "aTexCoordinate")
-        positionMatrixHandle = gl2.glGetUniformLocation(program, "uMVPMatrix")
-        textureTransformHandle = gl2.glGetUniformLocation(program, "uTextureTransform")
-        textureHandle = gl2.glGetUniformLocation(program, "sTexture")
-    }
-
     private inline fun withGlErrorChecking(operation: String? = null, glBlock: () -> Unit) {
         glBlock()
         val error = gl2.glGetError()
         if (BuildConfig.DEBUG && error != gl2.GL_NO_ERROR) {
             operation?.let { Log.e(TAG, "$it failed") }
             throw RuntimeException(GLUtils.getEGLErrorString(error))
-        }
-    }
-
-    private fun verifyProgram() {
-        if (!BuildConfig.DEBUG) return
-        with(IntArray(1)) {
-            gl2.glGetProgramiv(program, gl2.GL_LINK_STATUS, this, 0)
-            if (get(0) != gl2.GL_TRUE) {
-                Log.e(TAG, "Error while linking a program:\n${gl2.glGetProgramInfoLog(program)}")
-            }
         }
     }
 

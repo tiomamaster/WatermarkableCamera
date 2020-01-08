@@ -12,8 +12,10 @@ import android.os.HandlerThread
 import android.util.Log
 import android.util.Size
 import android.view.Surface
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.button.MaterialButton
 import kotlinx.android.synthetic.main.activity_camera.*
 import java.io.File
 import java.lang.Long.signum
@@ -26,6 +28,73 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
     private lateinit var renderer: Renderer
 
+    private val cameraOpenCloseLock = Semaphore(1)
+
+    private var backgroundThread: HandlerThread? = null
+    private var backgroundHandler: Handler? = null
+
+    private lateinit var previewSize: Size
+
+//    private var sensorOrientation = 0
+
+    private var cameraDevice: CameraDevice? = null
+
+    private val cameraStateCallback = object : CameraDevice.StateCallback() {
+        override fun onOpened(camera: CameraDevice) {
+            cameraOpenCloseLock.release()
+            cameraDevice = camera
+            startPreview()
+        }
+
+        override fun onDisconnected(camera: CameraDevice) {
+            cameraOpenCloseLock.release()
+            camera.close()
+            cameraDevice = null
+        }
+
+        override fun onError(camera: CameraDevice, error: Int) {
+            cameraOpenCloseLock.release()
+            camera.close()
+            cameraDevice = null
+            finish()
+        }
+    }
+
+    private lateinit var captureRequestBuilder: CaptureRequest.Builder
+
+    private var captureSession: CameraCaptureSession? = null
+
+    private val rotation by lazy { windowManager.defaultDisplay.rotation }
+
+    private val captureSessionCallback = object : CameraCaptureSession.StateCallback() {
+        override fun onConfigured(session: CameraCaptureSession) {
+            captureSession = session
+            captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
+            session.setRepeatingRequest(captureRequestBuilder.build(), null, null)
+
+            btnStartStop.setOnClickListener(::startStopRecording)
+        }
+
+        override fun onConfigureFailed(session: CameraCaptureSession) = Unit
+    }
+
+    private var recording = false
+
+    private val videoFilePath: String
+        get() {
+            val filename = "${System.currentTimeMillis()}.mp4"
+            val dir = getExternalFilesDir(null)
+
+            return if (dir == null) {
+                filename
+            } else {
+                "${dir.absolutePath}/$filename"
+            }
+        }
+
+    private val hasPermissions: Boolean
+        get() = PERMISSIONS.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_camera)
@@ -33,8 +102,6 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         renderer = Renderer(applicationContext, this)
         rsv.rendererCallbacks = renderer
     }
-
-    private val cameraOpenCloseLock = Semaphore(1)
 
     override fun onResume() {
         super.onResume()
@@ -51,9 +118,6 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         renderer.releaseSurfaceTextures()
         rsv.pause()
     }
-
-    private var backgroundThread: HandlerThread? = null
-    private var backgroundHandler: Handler? = null
 
     private fun startBackgroundThread() {
         backgroundThread = HandlerThread("CameraBackground")
@@ -88,17 +152,12 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
             val cameraId = cameraManager.cameraIdList.first()
             val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+//            sensorOrientation = characteristics[CameraCharacteristics.SENSOR_ORIENTATION] ?: 0
             val configurationMap =
-                characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                characteristics[CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP]
                     ?: throw RuntimeException("Cannot get available preview/video sizes")
-            val previewSize = choosePreviewSize(
+            previewSize = choosePreviewSize(
                 configurationMap.getOutputSizes(SurfaceTexture::class.java),
-                rsv.width,
-                rsv.height
-            )
-            renderer.setupSurfaceTextures(
-                previewSize.width,
-                previewSize.height,
                 rsv.width,
                 rsv.height
             )
@@ -108,7 +167,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             val previewAsp = previewSize.height * 1.0f / previewSize.width
             renderer.screenToPreviewAsp = if (screenAsp < previewAsp) screenAsp / previewAsp
             else previewAsp / screenAsp
-            renderer.rotation = when (windowManager.defaultDisplay.rotation) {
+            renderer.rotation = when (rotation) {
                 Surface.ROTATION_90 -> 90f
                 Surface.ROTATION_270 -> -90f
                 else -> 0f
@@ -140,37 +199,20 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         }
     }
 
-    private var cameraDevice: CameraDevice? = null
-
-    private val cameraStateCallback = object : CameraDevice.StateCallback() {
-        override fun onOpened(camera: CameraDevice) {
-            cameraOpenCloseLock.release()
-            cameraDevice = camera
-            startPreview()
-        }
-
-        override fun onDisconnected(camera: CameraDevice) {
-            cameraOpenCloseLock.release()
-            camera.close()
-            cameraDevice = null
-        }
-
-        override fun onError(camera: CameraDevice, error: Int) {
-            cameraOpenCloseLock.release()
-            camera.close()
-            cameraDevice = null
-            finish()
-        }
-    }
-
-    private lateinit var captureRequestBuilder: CaptureRequest.Builder
-
     private fun startPreview() {
         try {
             closePreviewSession()
 
             captureRequestBuilder =
                 cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+
+            // call from camera thread
+            renderer.setupSurfaceTextures(
+                previewSize.width,
+                previewSize.height,
+                rsv.width,
+                rsv.height
+            )
 
             val surface = Surface(renderer.cameraSurfaceTexture)
             captureRequestBuilder.addTarget(surface)
@@ -189,29 +231,37 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         captureSession = null
     }
 
-    private var captureSession: CameraCaptureSession? = null
-
-    private val captureSessionCallback = object : CameraCaptureSession.StateCallback() {
-        override fun onConfigured(session: CameraCaptureSession) {
-            captureSession = session
-            captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
-            session.setRepeatingRequest(captureRequestBuilder.build(), null, null)
-        }
-
-        override fun onConfigureFailed(session: CameraCaptureSession) = Unit
-    }
-
-    private val videoFilePath: String
-        get() {
-            val filename = "${System.currentTimeMillis()}.mp4"
-            val dir = getExternalFilesDir(null)
-
-            return if (dir == null) {
-                filename
-            } else {
-                "${dir.absolutePath}/$filename"
+    @SuppressLint("SetTextI18n")
+    private fun startStopRecording(v: View) {
+        val btn = v as MaterialButton
+        if (recording) {
+            rsv.stopRecording()
+            btn.text = "Start"
+            recording = false
+        } else {
+//            val orientationHint = when (sensorOrientation) {
+//                SENSOR_ORIENTATION_DEFAULT_DEGREES -> DEFAULT_ORIENTATIONS[rotation]
+//                SENSOR_ORIENTATION_INVERSE_DEGREES -> INVERSE_ORIENTATIONS[rotation]
+//                else -> 0
+//            }
+            try {
+                val (videoWidth, videoHeight) = if (rsv.width < rsv.height) WIDTH to HEIGHT else HEIGHT to WIDTH
+                rsv.initRecorder(
+                    File(videoFilePath),
+                    videoWidth,
+                    videoHeight,
+//                    orientationHint,
+                    null,
+                    null
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Couldn't re-init recording", e)
             }
+            rsv.startRecording()
+            btn.text = "Stop"
+            recording = true
         }
+    }
 
     @Suppress("SameParameterValue")
     private fun choosePreviewSize(
@@ -235,9 +285,6 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             choices[0]
         }
     }
-
-    private val hasPermissions: Boolean
-        get() = PERMISSIONS.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
 
     private fun checkAndRequestPermissions(): Boolean =
         if (!hasPermissions) {
@@ -267,6 +314,21 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
         val PERMISSIONS = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
         const val REQUEST_CODE_PERMISSIONS = 0xCA
+
+//        const val SENSOR_ORIENTATION_DEFAULT_DEGREES = 90
+//        const val SENSOR_ORIENTATION_INVERSE_DEGREES = 270
+//        val DEFAULT_ORIENTATIONS = SparseIntArray().apply {
+//            append(Surface.ROTATION_0, 90)
+//            append(Surface.ROTATION_90, 0)
+//            append(Surface.ROTATION_180, 270)
+//            append(Surface.ROTATION_270, 180)
+//        }
+//        val INVERSE_ORIENTATIONS = SparseIntArray().apply {
+//            append(Surface.ROTATION_0, 270)
+//            append(Surface.ROTATION_90, 180)
+//            append(Surface.ROTATION_180, 90)
+//            append(Surface.ROTATION_270, 0)
+//        }
 
         const val WIDTH = 720
         const val HEIGHT = 1280
