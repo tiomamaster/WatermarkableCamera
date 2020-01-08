@@ -42,29 +42,29 @@ class Renderer(
 
     override fun onPreDrawFrame() = Unit
 
-    var screenToPreviewAspectRatio = 1f
+    var screenToPreviewAsp = 1f
+    var rotation = 0f
 
     override fun onDrawFrame() {
         gl2.glEnable(gl2.GL_BLEND)
         gl2.glBlendFunc(gl2.GL_ONE, gl2.GL_ONE_MINUS_SRC_ALPHA)
 
-        val mvpMatrix = FloatArray(16)
+        val orthoMatrix = FloatArray(16)
         Matrix.orthoM(
-            mvpMatrix,
+            orthoMatrix,
             0,
-            -screenToPreviewAspectRatio,
-            screenToPreviewAspectRatio,
+            -screenToPreviewAsp,
+            screenToPreviewAsp,
             -1.0f,
             1.0f,
             -1f,
             1f
         )
-        val rotateMatrix = FloatArray(16)
-        Matrix.setIdentityM(rotateMatrix, 0)
-        Matrix.rotateM(rotateMatrix, 0, -90f, 0f, 0f, 1f)
-        val m = FloatArray(16)
-        Matrix.multiplyMM(m, 0, rotateMatrix, 0, mvpMatrix, 0)
-        drawCamera(m)
+        val rotateMatrix = FloatArray(16).apply { Matrix.setIdentityM(this, 0) }
+        Matrix.rotateM(rotateMatrix, 0, rotation, 0f, 0f, 1f)
+        val mvpMatrix = FloatArray(16)
+        Matrix.multiplyMM(mvpMatrix, 0, rotateMatrix, 0, orthoMatrix, 0)
+        drawCamera(mvpMatrix)
 
 //        Matrix.orthoM(
 //            mvpMatrix,

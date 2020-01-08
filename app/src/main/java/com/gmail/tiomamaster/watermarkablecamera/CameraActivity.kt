@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
+import android.media.MediaRecorder
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
@@ -93,26 +94,31 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
                     ?: throw RuntimeException("Cannot get available preview/video sizes")
 //            val sensorOrientation =
 //                characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
-//            val videoSize =
-//                chooseVideoSize(configurationMap.getOutputSizes(MediaRecorder::class.java))
-//            previewSize = choosePreviewSize(
-//                configurationMap.getOutputSizes(SurfaceTexture::class.java),
-//                WIDTH,
-//                HEIGHT,
-//                videoSize
-//            )
-
-            val (w, h) = if (rsv.width < rsv.height) rsv.width to rsv.height else rsv.height to rsv.width
-            previewSize = getOptimalPreviewSize(
+            val videoSize =
+                chooseVideoSize(configurationMap.getOutputSizes(MediaRecorder::class.java))
+            previewSize = choosePreviewSize(
                 configurationMap.getOutputSizes(SurfaceTexture::class.java),
-                w, h
+                WIDTH,
+                HEIGHT,
+                videoSize
             )
 
-            val screenAsp =
-                if (rsv.width < rsv.height) rsv.width * 1.0f / rsv.height else rsv.height * 1.0f / rsv.width
+//            val (w, h) = if (rsv.width < rsv.height) rsv.width to rsv.height else rsv.height to rsv.width
+//            previewSize = getOptimalPreviewSize(
+//                configurationMap.getOutputSizes(SurfaceTexture::class.java),
+//                w, h
+//            )
+
+            val screenAsp = if (rsv.width < rsv.height) rsv.width * 1.0f / rsv.height
+            else rsv.height * 1.0f / rsv.width
             val previewAsp = previewSize.height * 1.0f / previewSize.width
-            val screenToPreviewAsp = if (screenAsp < previewAsp) screenAsp / previewAsp else previewAsp / screenAsp
-            renderer.screenToPreviewAspectRatio = screenToPreviewAsp
+            renderer.screenToPreviewAsp = if (screenAsp < previewAsp) screenAsp / previewAsp
+            else previewAsp / screenAsp
+            renderer.rotation = when (windowManager.defaultDisplay.rotation) {
+                Surface.ROTATION_90 -> 90f
+                Surface.ROTATION_270 -> -90f
+                else -> 0f
+            }
 
             cameraManager.openCamera(cameraId, cameraStateCallback, backgroundHandler)
         } catch (e: CameraAccessException) {
