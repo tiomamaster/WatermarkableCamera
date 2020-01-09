@@ -33,8 +33,6 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     private var backgroundThread: HandlerThread? = null
     private var backgroundHandler: Handler? = null
 
-    private lateinit var previewSize: Size
-
 //    private var sensorOrientation = 0
 
     private var cameraDevice: CameraDevice? = null
@@ -68,6 +66,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
     private val captureSessionCallback = object : CameraCaptureSession.StateCallback() {
         override fun onConfigured(session: CameraCaptureSession) {
+            if (cameraDevice == null) return
             captureSession = session
             captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
             session.setRepeatingRequest(captureRequestBuilder.build(), null, null)
@@ -156,11 +155,12 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             val configurationMap =
                 characteristics[CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP]
                     ?: throw RuntimeException("Cannot get available preview/video sizes")
-            previewSize = choosePreviewSize(
+            val previewSize = choosePreviewSize(
                 configurationMap.getOutputSizes(SurfaceTexture::class.java),
                 rsv.width,
                 rsv.height
             )
+            renderer.setupCameraSurfaceTextures(previewSize.width, previewSize.height)
 
             val screenAsp = if (rsv.width < rsv.height) rsv.width * 1.0f / rsv.height
             else rsv.height * 1.0f / rsv.width
@@ -205,14 +205,6 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
             captureRequestBuilder =
                 cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-
-            // call from camera thread
-            renderer.setupSurfaceTextures(
-                previewSize.width,
-                previewSize.height,
-                rsv.width,
-                rsv.height
-            )
 
             val surface = Surface(renderer.cameraSurfaceTexture)
             captureRequestBuilder.addTarget(surface)

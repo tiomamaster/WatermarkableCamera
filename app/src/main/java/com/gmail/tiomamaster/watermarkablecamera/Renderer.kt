@@ -28,7 +28,8 @@ class Renderer(
     var rotation = 0f
 
     var cameraSurfaceTexture: SurfaceTexture? = null
-    private var needUpdateCameraTexture = false
+    private var camFrameAvailableRegistered = false
+    private var cameraRefreshCount = 0
     private val cameraTransformMatrix = FloatArray(16)
 
     var watermarkSurfaceTexture: SurfaceTexture? = null
@@ -45,30 +46,25 @@ class Renderer(
     private var textureTransformHandle = 0
     private var textureHandle = 0
 
-    /**
-     * This function has to be called from the camera thread.
-     */
     @SuppressLint("Recycle")
-    fun setupSurfaceTextures(camWidth: Int, camHeight: Int, waterWidth: Int, waterHeight: Int) {
+    fun setupCameraSurfaceTextures(width: Int, height: Int) {
         cameraSurfaceTexture = SurfaceTexture(textureIds[0]).apply {
-            setDefaultBufferSize(camWidth, camHeight)
-            setOnFrameAvailableListener {
-                needUpdateCameraTexture = true
-                getTransformMatrix(cameraTransformMatrix)
-            }
+            setDefaultBufferSize(width, height)
         }
+    }
+
+    @SuppressLint("Recycle")
+    fun setupWatermarkSurfaceTexture(width: Int, height: Int) {
         watermarkSurfaceTexture = SurfaceTexture(textureIds[1]).apply {
-            setDefaultBufferSize(waterWidth, waterHeight)
-            setOnFrameAvailableListener {
-                needUpdateWatermarkTexture = true
-                getTransformMatrix(watermarkTransformMatrix)
-            }
+            setDefaultBufferSize(width, height)
         }
     }
 
     fun releaseSurfaceTextures() {
         cameraSurfaceTexture?.release()
+        cameraSurfaceTexture = null
         watermarkSurfaceTexture?.release()
+        watermarkSurfaceTexture = null
     }
 
     override fun onSurfaceCreated() {
@@ -164,7 +160,16 @@ class Renderer(
 
     override fun onContextCreated() = Unit
 
-    override fun onPreDrawFrame() = Unit
+    override fun onPreDrawFrame() {
+        if (camFrameAvailableRegistered) return
+        cameraSurfaceTexture?.apply {
+            setOnFrameAvailableListener {
+                getTransformMatrix(cameraTransformMatrix)
+                cameraRefreshCount++
+            }
+            camFrameAvailableRegistered = true
+        }
+    }
 
     override fun onDrawFrame() {
         gl2.glEnable(gl2.GL_BLEND)
@@ -203,19 +208,18 @@ class Renderer(
     }
 
     private fun drawCamera(mvpMatrix: FloatArray) {
-        if (needUpdateCameraTexture) {
+        // call updateTexImage() exactly the same count as onFrameAvailable listener was triggered
+        // onFrameAvailable won't trigger if skip some updates
+        while (cameraRefreshCount > 0) {
             cameraSurfaceTexture?.updateTexImage()
-            needUpdateCameraTexture = false
+            cameraRefreshCount--
         }
 
         gl2.glUniformMatrix4fv(textureTransformHandle, 1, false, cameraTransformMatrix, 0)
 
         gl2.glActiveTexture(gl2.GL_TEXTURE0)
         withGlErrorChecking("Bind camera texture") {
-            gl2.glBindTexture(
-                GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-                textureIds[0]
-            )
+            gl2.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureIds[0])
         }
         gl2.glUniform1i(textureHandle, 0)
 
@@ -232,10 +236,7 @@ class Renderer(
 
         gl2.glActiveTexture(gl2.GL_TEXTURE1)
         withGlErrorChecking("Bind watermark texture") {
-            gl2.glBindTexture(
-                GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-                textureIds[1]
-            )
+            gl2.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureIds[1])
         }
         gl2.glUniform1i(textureHandle, 1)
 
