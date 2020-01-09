@@ -33,7 +33,8 @@ class Renderer(
     private val cameraTransformMatrix = FloatArray(16)
 
     var watermarkSurfaceTexture: SurfaceTexture? = null
-    private var needUpdateWatermarkTexture = false
+    private var watFrameAvailableRegistered = false
+    private var watRefreshCount = 0
     private val watermarkTransformMatrix = FloatArray(16)
 
     private val textureIds = IntArray(2)
@@ -161,14 +162,26 @@ class Renderer(
     override fun onContextCreated() = Unit
 
     override fun onPreDrawFrame() {
-        if (camFrameAvailableRegistered) return
-        cameraSurfaceTexture?.apply {
-            setOnFrameAvailableListener {
-                getTransformMatrix(cameraTransformMatrix)
-                cameraRefreshCount++
+        if (!camFrameAvailableRegistered) {
+            cameraSurfaceTexture?.apply {
+                setOnFrameAvailableListener {
+                    getTransformMatrix(cameraTransformMatrix)
+                    cameraRefreshCount++
+                    Log.d(TAG, "cameraRefreshCount $cameraRefreshCount")
+                }
+                camFrameAvailableRegistered = true
             }
-            camFrameAvailableRegistered = true
         }
+//        if (!watFrameAvailableRegistered) {
+//            watermarkSurfaceTexture?.apply {
+//                setOnFrameAvailableListener {
+//                    getTransformMatrix(watermarkTransformMatrix)
+//                    watRefreshCount++
+//                    Log.d(TAG, "watRefreshCount $watRefreshCount")
+//                }
+//                watFrameAvailableRegistered = true
+//            }
+//        }
     }
 
     override fun onDrawFrame() {
@@ -194,22 +207,22 @@ class Renderer(
         Matrix.multiplyMM(mvpMatrix, 0, rotateMatrix, 0, orthoMatrix, 0)
         drawCamera(mvpMatrix)
 
-//        Matrix.orthoM(
-//            mvpMatrix,
-//            0,
-//            -1f,
-//            1f,
-//            -1f,
-//            1f,
-//            -1f,
-//            1f
-//        )
-//        drawWatermark(mvpMatrix)
+        Matrix.orthoM(
+            mvpMatrix,
+            0,
+            -1f,
+            1f,
+            -1f,
+            1f,
+            -1f,
+            1f
+        )
+        drawWatermark(mvpMatrix)
     }
 
     private fun drawCamera(mvpMatrix: FloatArray) {
         // call updateTexImage() exactly the same count as onFrameAvailable listener was triggered
-        // onFrameAvailable won't trigger if skip some updates
+        // onFrameAvailable won't trigger if skip some updates, the same for watermark
         while (cameraRefreshCount > 0) {
             cameraSurfaceTexture?.updateTexImage()
             cameraRefreshCount--
@@ -227,10 +240,11 @@ class Renderer(
     }
 
     private fun drawWatermark(mvpMatrix: FloatArray) {
-        if (needUpdateWatermarkTexture) {
+//        while (watRefreshCount > 0) {
             watermarkSurfaceTexture?.updateTexImage()
-            needUpdateWatermarkTexture = false
-        }
+            watermarkSurfaceTexture?.getTransformMatrix(watermarkTransformMatrix)
+//            watRefreshCount--
+//        }
 
         gl2.glUniformMatrix4fv(textureTransformHandle, 1, false, watermarkTransformMatrix, 0)
 

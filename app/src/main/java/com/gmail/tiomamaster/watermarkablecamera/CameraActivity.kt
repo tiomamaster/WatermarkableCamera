@@ -17,16 +17,21 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
 import kotlinx.android.synthetic.main.activity_camera.*
+import kotlinx.android.synthetic.main.watermark.view.*
 import java.io.File
 import java.lang.Long.signum
 import java.util.*
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import kotlin.Comparator
+import kotlin.concurrent.fixedRateTimer
 
 class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
     private lateinit var renderer: Renderer
+
+    private lateinit var watermark: WatermarkView
+    private lateinit var timer: Timer
 
     private val cameraOpenCloseLock = Semaphore(1)
 
@@ -137,6 +142,25 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
     override fun onRendererReady() {
         runOnUiThread { openCamera() }
+        setupWatermark()
+    }
+
+    @SuppressLint("InflateParams", "Recycle")
+    private fun setupWatermark() {
+        renderer.setupWatermarkSurfaceTexture(rsv.width, rsv.height)
+        watermark = layoutInflater.inflate(R.layout.watermark, null) as WatermarkView
+        with(watermark) {
+            surface = Surface(renderer.watermarkSurfaceTexture)
+            val widthMeasureSpec =
+                View.MeasureSpec.makeMeasureSpec(rsv.width, View.MeasureSpec.EXACTLY)
+            val heightMeasureSpec =
+                View.MeasureSpec.makeMeasureSpec(rsv.height, View.MeasureSpec.EXACTLY)
+            this.widthMeasureSpec = widthMeasureSpec
+            this.heightMeasureSpec = heightMeasureSpec
+            measure(widthMeasureSpec, heightMeasureSpec)
+            layout(0, 0, watermark.measuredWidth, watermark.measuredHeight)
+            draw(null)
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -227,6 +251,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     private fun startStopRecording(v: View) {
         val btn = v as MaterialButton
         if (recording) {
+            stopTimer()
             rsv.stopRecording()
             btn.text = "Start"
             recording = false
@@ -250,10 +275,21 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
                 Log.e(TAG, "Couldn't re-init recording", e)
             }
             rsv.startRecording()
+            startTimer()
             btn.text = "Stop"
             recording = true
         }
     }
+
+    private fun startTimer() {
+        var i = 0
+        timer = fixedRateTimer(period = 1000) {
+            watermark.text.text = "${i++}"
+            watermark.draw(null)
+        }
+    }
+
+    private fun stopTimer() = timer.cancel()
 
     @Suppress("SameParameterValue")
     private fun choosePreviewSize(
