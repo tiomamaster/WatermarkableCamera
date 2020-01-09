@@ -34,7 +34,7 @@ class Renderer(
 
     var watermarkSurfaceTexture: SurfaceTexture? = null
     private var watFrameAvailableRegistered = false
-    private var watRefreshCount = 0
+    private var needUpdateWatermarkTexture = false
     private val watermarkTransformMatrix = FloatArray(16)
 
     private val textureIds = IntArray(2)
@@ -64,8 +64,10 @@ class Renderer(
     fun releaseSurfaceTextures() {
         cameraSurfaceTexture?.release()
         cameraSurfaceTexture = null
+        camFrameAvailableRegistered = false
         watermarkSurfaceTexture?.release()
         watermarkSurfaceTexture = null
+        watFrameAvailableRegistered = false
     }
 
     override fun onSurfaceCreated() {
@@ -167,21 +169,18 @@ class Renderer(
                 setOnFrameAvailableListener {
                     getTransformMatrix(cameraTransformMatrix)
                     cameraRefreshCount++
-                    Log.d(TAG, "cameraRefreshCount $cameraRefreshCount")
                 }
                 camFrameAvailableRegistered = true
             }
         }
-//        if (!watFrameAvailableRegistered) {
-//            watermarkSurfaceTexture?.apply {
-//                setOnFrameAvailableListener {
-//                    getTransformMatrix(watermarkTransformMatrix)
-//                    watRefreshCount++
-//                    Log.d(TAG, "watRefreshCount $watRefreshCount")
-//                }
-//                watFrameAvailableRegistered = true
-//            }
-//        }
+        if (!watFrameAvailableRegistered) {
+            watermarkSurfaceTexture?.apply {
+                setOnFrameAvailableListener {
+                    needUpdateWatermarkTexture = true
+                }
+                watFrameAvailableRegistered = true
+            }
+        }
     }
 
     override fun onDrawFrame() {
@@ -222,7 +221,7 @@ class Renderer(
 
     private fun drawCamera(mvpMatrix: FloatArray) {
         // call updateTexImage() exactly the same count as onFrameAvailable listener was triggered
-        // onFrameAvailable won't trigger if skip some updates, the same for watermark
+        // onFrameAvailable won't trigger if skip some updates
         while (cameraRefreshCount > 0) {
             cameraSurfaceTexture?.updateTexImage()
             cameraRefreshCount--
@@ -240,11 +239,8 @@ class Renderer(
     }
 
     private fun drawWatermark(mvpMatrix: FloatArray) {
-//        while (watRefreshCount > 0) {
-            watermarkSurfaceTexture?.updateTexImage()
-            watermarkSurfaceTexture?.getTransformMatrix(watermarkTransformMatrix)
-//            watRefreshCount--
-//        }
+        if (needUpdateWatermarkTexture) watermarkSurfaceTexture?.updateTexImage()
+        watermarkSurfaceTexture?.getTransformMatrix(watermarkTransformMatrix)
 
         gl2.glUniformMatrix4fv(textureTransformHandle, 1, false, watermarkTransformMatrix, 0)
 

@@ -32,6 +32,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
     private lateinit var watermark: WatermarkView
     private lateinit var timer: Timer
+    private var recording = false
 
     private val cameraOpenCloseLock = Semaphore(1)
 
@@ -82,8 +83,6 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         override fun onConfigureFailed(session: CameraCaptureSession) = Unit
     }
 
-    private var recording = false
-
     private val videoFilePath: String
         get() {
             val filename = "${System.currentTimeMillis()}.mp4"
@@ -112,7 +111,10 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         startBackgroundThread()
         rsv.resume()
 
-        if (renderer.ready && cameraOpenCloseLock.availablePermits() == 1) openCamera()
+        if (renderer.ready && cameraOpenCloseLock.availablePermits() == 1) {
+            openCamera()
+            setupWatermark()
+        }
     }
 
     override fun onPause() {
@@ -141,8 +143,10 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     }
 
     override fun onRendererReady() {
-        runOnUiThread { openCamera() }
-        setupWatermark()
+        runOnUiThread {
+            openCamera()
+            setupWatermark()
+        }
     }
 
     @SuppressLint("InflateParams", "Recycle")

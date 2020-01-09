@@ -15,11 +15,11 @@
         android:shadowDx="4"
         android:shadowDy="4"
         android:shadowRadius="1"
-        android:text="text"
         android:textColor="@android:color/white"
         android:textSize="20sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
+        tools:text="text"
         tools:textColor="@android:color/black" />
 
     <androidx.appcompat.widget.AppCompatImageView
