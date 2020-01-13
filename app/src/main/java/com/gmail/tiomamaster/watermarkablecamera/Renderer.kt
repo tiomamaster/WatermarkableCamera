@@ -62,12 +62,16 @@ class Renderer(
     }
 
     fun releaseSurfaceTextures() {
-        cameraSurfaceTexture?.release()
-        cameraSurfaceTexture = null
-        camFrameAvailableRegistered = false
+        releaseCameraSurfaceTexture()
         watermarkSurfaceTexture?.release()
         watermarkSurfaceTexture = null
         watFrameAvailableRegistered = false
+    }
+
+    fun releaseCameraSurfaceTexture() {
+        cameraSurfaceTexture?.release()
+        cameraSurfaceTexture = null
+        camFrameAvailableRegistered = false
     }
 
     override fun onSurfaceCreated() {

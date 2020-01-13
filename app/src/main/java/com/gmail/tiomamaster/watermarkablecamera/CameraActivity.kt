@@ -33,6 +33,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     private lateinit var watermark: WatermarkView
     private lateinit var timer: Timer
     private var recording = false
+    private var cameraFacing = CameraCharacteristics.LENS_FACING_BACK
 
     private val cameraOpenCloseLock = Semaphore(1)
 
@@ -78,6 +79,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             session.setRepeatingRequest(captureRequestBuilder.build(), null, null)
 
             btnStartStop.setOnClickListener(::startStopRecording)
+            btnChangeCamera.setOnClickListener(::changeCamera)
         }
 
         override fun onConfigureFailed(session: CameraCaptureSession) = Unit
@@ -177,7 +179,9 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             }
 
             val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-            val cameraId = cameraManager.cameraIdList.first()
+            val cameraId = cameraManager.cameraIdList.first {
+                cameraManager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == cameraFacing
+            }
             val characteristics = cameraManager.getCameraCharacteristics(cameraId)
 //            sensorOrientation = characteristics[CameraCharacteristics.SENSOR_ORIENTATION] ?: 0
             val configurationMap =
@@ -294,6 +298,18 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     }
 
     private fun stopTimer() = timer.cancel()
+
+    private fun changeCamera(v: View) {
+        v as MaterialButton
+        cameraFacing = if (cameraFacing == CameraCharacteristics.LENS_FACING_BACK) {
+            CameraCharacteristics.LENS_FACING_FRONT
+        } else {
+            CameraCharacteristics.LENS_FACING_BACK
+        }
+        closeCamera()
+        renderer.releaseCameraSurfaceTexture()
+        openCamera()
+    }
 
     @Suppress("SameParameterValue")
     private fun choosePreviewSize(
