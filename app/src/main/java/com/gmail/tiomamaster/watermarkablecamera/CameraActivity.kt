@@ -25,6 +25,7 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import kotlin.Comparator
 import kotlin.concurrent.fixedRateTimer
+import kotlin.random.Random
 
 class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
@@ -293,17 +294,23 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         var i = 0
         timer = fixedRateTimer(period = 1000) {
             watermark.text.text = "${i++}"
-            watermark.draw(null)
+            // TODO: animate it
+            watermark.img.x = Random.nextDouble(0.0, watermark.width.toDouble()).toFloat()
+            watermark.img.y = Random.nextDouble(0.0, watermark.height.toDouble()).toFloat()
+            watermark.update()
         }
     }
 
     private fun stopTimer() = timer.cancel()
 
+    @SuppressLint("SetTextI18n")
     private fun changeCamera(v: View) {
         v as MaterialButton
         cameraFacing = if (cameraFacing == CameraCharacteristics.LENS_FACING_BACK) {
+            btnChangeCamera.text = "back"
             CameraCharacteristics.LENS_FACING_FRONT
         } else {
+            btnChangeCamera.text = "front"
             CameraCharacteristics.LENS_FACING_BACK
         }
         closeCamera()
@@ -349,8 +356,8 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (!(requestCode == REQUEST_CODE_PERMISSIONS && grantResults.size > 1 &&
-            grantResults[0] == PackageManager.PERMISSION_GRANTED &&
-            grantResults[1] == PackageManager.PERMISSION_GRANTED)
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED &&
+                    grantResults[1] == PackageManager.PERMISSION_GRANTED)
         ) finish()
     }
 

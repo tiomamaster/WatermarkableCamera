@@ -19,6 +19,8 @@ class WatermarkView @JvmOverloads constructor(
     var widthMeasureSpec: Int = 0
     var heightMeasureSpec: Int = 0
 
+    fun update() = draw(null)
+
     override fun draw(canvas: Canvas?) {
         if (surface == null) return
         try {
