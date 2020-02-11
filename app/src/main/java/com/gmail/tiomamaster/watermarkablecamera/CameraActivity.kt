@@ -348,10 +348,10 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_CODE_PERMISSIONS && grantResults.size > 1 &&
+        if (!(requestCode == REQUEST_CODE_PERMISSIONS && grantResults.size > 1 &&
             grantResults[0] == PackageManager.PERMISSION_GRANTED &&
-            grantResults[1] == PackageManager.PERMISSION_GRANTED
-        ) openCamera() else finish()
+            grantResults[1] == PackageManager.PERMISSION_GRANTED)
+        ) finish()
     }
 
     override fun onRendererFinished() = Unit
