@@ -52,31 +52,31 @@ public class RecordableSurfaceView extends SurfaceView {
 
     private Surface mSurface;
 
-    private AtomicInteger mRenderMode = new AtomicInteger(RENDER_MODE_CONTINUOUSLY);
+    private final AtomicInteger mRenderMode = new AtomicInteger(RENDER_MODE_CONTINUOUSLY);
 
-    private int mWidth = 0;
+    private int mWidth;
 
-    private int mHeight = 0;
+    private int mHeight;
 
-    private int mDesiredWidth = 0;
+    private int mDesiredWidth;
 
-    private int mDesiredHeight = 0;
+    private int mDesiredHeight;
 
-    private boolean mPaused = false;
+    private boolean mPaused;
 
     private MediaRecorder mMediaRecorder;
 
     private ARRenderThread mARRenderThread;
 
-    private AtomicBoolean mIsRecording = new AtomicBoolean(false);
+    private final AtomicBoolean mIsRecording = new AtomicBoolean(false);
 
-    private AtomicBoolean mHasGLContext = new AtomicBoolean(false);
+    private final AtomicBoolean mHasGLContext = new AtomicBoolean(false);
 
     private WeakReference<RendererCallbacks> mRendererCallbacksWeakReference;
 
-    private AtomicBoolean mSizeChange = new AtomicBoolean(false);
+    private final AtomicBoolean mSizeChange = new AtomicBoolean(false);
 
-    private AtomicBoolean mRenderRequested = new AtomicBoolean(false);
+    private final AtomicBoolean mRenderRequested = new AtomicBoolean(false);
 
     public RecordableSurfaceView(Context context) {
         super(context);
@@ -452,7 +452,7 @@ public class RecordableSurfaceView extends SurfaceView {
             }
         }
 
-        private AtomicBoolean mLoop = new AtomicBoolean(false);
+        private final AtomicBoolean mLoop = new AtomicBoolean(false);
 
         private EGLConfig chooseEglConfig(EGLDisplay eglDisplay) {
             int[] configsCount = new int[]{0};

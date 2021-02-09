@@ -6,6 +6,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
+import android.hardware.camera2.params.OutputConfiguration
+import android.hardware.camera2.params.SessionConfiguration
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
@@ -21,6 +24,7 @@ import kotlinx.android.synthetic.main.watermark.view.*
 import java.io.File
 import java.lang.Long.signum
 import java.util.*
+import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import kotlin.Comparator
@@ -70,7 +74,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
     private var captureSession: CameraCaptureSession? = null
 
-    private val rotation by lazy { windowManager.defaultDisplay.rotation }
+    private val rotation by lazy { display?.rotation }
 
     private val captureSessionCallback = object : CameraCaptureSession.StateCallback() {
         override fun onConfigured(session: CameraCaptureSession) {
@@ -232,6 +236,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun startPreview() {
         try {
             closePreviewSession()
@@ -241,11 +246,21 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
             val surface = Surface(renderer.cameraSurfaceTexture)
             captureRequestBuilder.addTarget(surface)
-            cameraDevice?.createCaptureSession(
-                listOf(surface),
-                captureSessionCallback,
-                backgroundHandler
-            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val config = SessionConfiguration(
+                    SessionConfiguration.SESSION_REGULAR,
+                    listOf(OutputConfiguration(surface)),
+                    Executors.newSingleThreadExecutor(),
+                    captureSessionCallback
+                )
+                cameraDevice?.createCaptureSession(config)
+            } else {
+                cameraDevice?.createCaptureSession(
+                    listOf(surface),
+                    captureSessionCallback,
+                    backgroundHandler
+                )
+            }
         } catch (e: CameraAccessException) {
             Log.e(TAG, e.toString())
         }
@@ -259,9 +274,8 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     @SuppressLint("SetTextI18n")
     private fun startStopRecording(v: View) {
         val btn = v as MaterialButton
-        if (recording) {
+        if (recording && rsv.stopRecording()) {
             stopTimer()
-            rsv.stopRecording()
             btn.text = "Start"
             recording = false
         } else {
@@ -283,10 +297,11 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             } catch (e: Exception) {
                 Log.e(TAG, "Couldn't re-init recording", e)
             }
-            rsv.startRecording()
-            startTimer()
-            btn.text = "Stop"
-            recording = true
+            if (rsv.startRecording()) {
+                startTimer()
+                btn.text = "Stop"
+                recording = true
+            }
         }
     }
 
