@@ -252,34 +252,6 @@ public class RecordableSurfaceView extends SurfaceView {
         mediaRecorder.setVideoEncodingBitRate(10000000);
         mediaRecorder.setVideoFrameRate(30);
 
-        if (desiredWidth > desiredHeight) {
-            float desiredAspect = 1080.0f / 2280.0f;
-
-            if (desiredWidth > 2280 || desiredHeight > 1080) {
-                float aspect = (float) desiredHeight / desiredWidth;
-                if (aspect > desiredAspect) {
-                    desiredHeight = 1080;
-                    desiredWidth = (int) Math.floor(desiredHeight / aspect);
-                } else {
-                    desiredWidth = 2280;
-                    desiredHeight = (int) Math.floor(desiredWidth * aspect);
-                }
-            }
-        } else {
-            float desiredAspect = 2280.0f / 1080.0f;
-
-            if (desiredWidth > 1080 || desiredHeight > 2280) {
-                float aspect = (float) desiredHeight / desiredWidth;
-                if (aspect > desiredAspect) {
-                    desiredHeight = 2280;
-                    desiredWidth = (int) Math.floor(desiredHeight / aspect);
-                } else {
-                    desiredWidth = 1080;
-                    desiredHeight = (int) Math.floor(desiredWidth * aspect);
-                }
-            }
-        }
-
         mDesiredWidth = desiredWidth;
         mDesiredHeight = desiredHeight;
 
@@ -462,6 +434,7 @@ public class RecordableSurfaceView extends SurfaceView {
             return configs[0];
         }
 
+        @SuppressWarnings("BusyWait")
         @Override
         public void run() {
             if (mHasGLContext.get()) {
@@ -574,7 +547,7 @@ public class RecordableSurfaceView extends SurfaceView {
                 }
 
                 try {
-                    Thread.sleep((long) (1f / 60f * 1000f));
+                    Thread.sleep((long) (1f / 30f * 1000f));
                 } catch (InterruptedException intex) {
                     if (mRendererCallbacksWeakReference != null
                             && mRendererCallbacksWeakReference.get() != null) {

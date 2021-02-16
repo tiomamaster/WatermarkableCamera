@@ -31,6 +31,7 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import kotlin.Comparator
 import kotlin.concurrent.fixedRateTimer
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 class CameraActivity : AppCompatActivity(), Renderer.StateListener {
@@ -121,6 +122,15 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
+        // adjust video's preview size to make it aspect ratio equal to recorded video
+        val height = resources.displayMetrics.heightPixels
+        val width = resources.displayMetrics.widthPixels
+        if (height > width) {
+            rsv.layoutParams.height = (width * ASP).roundToInt()
+        } else {
+            rsv.layoutParams.width = (height * ASP).roundToInt()
+        }
+
         renderer = Renderer(applicationContext, this)
         rsv.rendererCallbacks = renderer
     }
@@ -209,7 +219,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
                 rsv.width,
                 rsv.height
             )
-            renderer.setupCameraSurfaceTextures(previewSize.width, previewSize.height)
+            renderer.setupCameraSurfaceTexture(previewSize.width, previewSize.height)
 
             val screenAsp = if (rsv.width < rsv.height) rsv.width * 1.0f / rsv.height
             else rsv.height * 1.0f / rsv.width
@@ -414,5 +424,6 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
         const val WIDTH = 720
         const val HEIGHT = 1280
+        const val ASP = HEIGHT / WIDTH.toFloat()
     }
 }

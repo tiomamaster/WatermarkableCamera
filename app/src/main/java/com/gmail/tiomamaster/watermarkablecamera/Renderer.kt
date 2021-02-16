@@ -48,7 +48,7 @@ class Renderer(
     private var textureHandle = 0
 
     @SuppressLint("Recycle")
-    fun setupCameraSurfaceTextures(width: Int, height: Int) {
+    fun setupCameraSurfaceTexture(width: Int, height: Int) {
         cameraSurfaceTexture = SurfaceTexture(textureIds[0]).apply {
             setDefaultBufferSize(width, height)
         }
@@ -133,7 +133,7 @@ class Renderer(
         }
         verifyProgram()
         gl2.glUseProgram(program)
-        setupHandlers()
+        setupHandles()
     }
 
     private fun verifyProgram() {
@@ -146,7 +146,7 @@ class Renderer(
         }
     }
 
-    private fun setupHandlers() {
+    private fun setupHandles() {
         positionHandle = gl2.glGetAttribLocation(program, "aPosition")
         textureCoordinateHandle = gl2.glGetAttribLocation(program, "aTexCoordinate")
         positionMatrixHandle = gl2.glGetUniformLocation(program, "uMVPMatrix")
@@ -197,8 +197,8 @@ class Renderer(
             0,
             -screenToPreviewAsp,
             screenToPreviewAsp,
-            -1.0f,
-            1.0f,
+            -1f,
+            1f,
             -1f,
             1f
         )
