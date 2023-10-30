@@ -306,7 +306,7 @@ class Renderer(
 
     private companion object {
 
-        val TAG = Renderer::class.java.simpleName
+        val TAG: String = Renderer::class.java.simpleName
 
         const val VERTEX_SHADER_PATH = "shaders/tex.vert"
         const val FRAGMENT_SHADER_PATH = "shaders/tex.frag"

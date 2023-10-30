@@ -30,7 +30,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Intended as a near-drop-in replacement for {@link GLSurfaceView}, but reliant on callbacks
  * instead of an explicit {@link GLSurfaceView.Renderer}.
  *
- *
  * <p><strong>Note:</strong> Currently, RecordableSurfaceView does not record video on the emulator
  * due to a dependency on {@link MediaRecorder}.</p>
  */
@@ -460,6 +459,11 @@ public class RecordableSurfaceView extends SurfaceView {
             // guarantee to only report surface as created once GL context
             // associated with the surface has been created, and call on the GL thread
             // NOT the main thread but BEFORE the codec surface is attached to the GL context
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
             if (mRendererCallbacksWeakReference != null
                     && mRendererCallbacksWeakReference.get() != null) {
                 mRendererCallbacksWeakReference.get().onSurfaceCreated();

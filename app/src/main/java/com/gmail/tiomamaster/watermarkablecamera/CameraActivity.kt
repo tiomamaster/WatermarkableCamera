@@ -17,19 +17,18 @@ import android.util.Size
 import android.view.*
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.AppCompatImageView
+import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.google.android.material.button.MaterialButton
-import kotlinx.android.synthetic.main.activity_camera.*
-import kotlinx.android.synthetic.main.watermark.view.*
 import java.io.File
 import java.lang.Long.signum
 import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
-import kotlin.Comparator
 import kotlin.concurrent.fixedRateTimer
 import kotlin.math.roundToInt
 import kotlin.random.Random
@@ -39,6 +38,11 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     private lateinit var renderer: Renderer
 
     private lateinit var watermark: WatermarkView
+    private lateinit var watermarkText: AppCompatTextView
+    private lateinit var watermarkImage: AppCompatImageView
+    private lateinit var rsv: RecordableSurfaceView
+    private lateinit var btnStartStop: MaterialButton
+    private lateinit var btnChangeCamera: MaterialButton
     private lateinit var timer: Timer
     private var recording = false
     private var cameraFacing = CameraCharacteristics.LENS_FACING_BACK
@@ -77,7 +81,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
     private var captureSession: CameraCaptureSession? = null
 
-    private val rotation by lazy { display?.rotation }
+    private val rotation by lazy { /*display?.rotation*/Surface.ROTATION_0 }
 
     private val captureSessionCallback = object : CameraCaptureSession.StateCallback() {
         override fun onConfigured(session: CameraCaptureSession) {
@@ -111,6 +115,9 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_camera)
+        rsv = findViewById(R.id.rsv)
+        btnStartStop = findViewById(R.id.btnStartStop)
+        btnChangeCamera = findViewById(R.id.btnChangeCamera)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes.layoutInDisplayCutoutMode =
@@ -139,11 +146,6 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         super.onResume()
         startBackgroundThread()
         rsv.resume()
-
-        if (renderer.ready && cameraOpenCloseLock.availablePermits() == 1) {
-            openCamera()
-            setupWatermark()
-        }
     }
 
     override fun onPause() {
@@ -182,6 +184,8 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     private fun setupWatermark() {
         renderer.setupWatermarkSurfaceTexture(rsv.width, rsv.height)
         watermark = layoutInflater.inflate(R.layout.watermark, null) as WatermarkView
+        watermarkText = watermark.findViewById(R.id.text)
+        watermarkImage = watermark.findViewById(R.id.img)
         with(watermark) {
             surface = Surface(renderer.watermarkSurfaceTexture)
             val widthMeasureSpec =
@@ -192,7 +196,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             this.heightMeasureSpec = heightMeasureSpec
             measure(widthMeasureSpec, heightMeasureSpec)
             layout(0, 0, watermark.measuredWidth, watermark.measuredHeight)
-            draw(null)
+            update()
         }
     }
 
@@ -207,7 +211,8 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
             val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
             val cameraId = cameraManager.cameraIdList.first {
-                cameraManager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == cameraFacing
+                cameraManager.getCameraCharacteristics(it)
+                    .get(CameraCharacteristics.LENS_FACING) == cameraFacing
             }
             val characteristics = cameraManager.getCameraCharacteristics(cameraId)
 //            sensorOrientation = characteristics[CameraCharacteristics.SENSOR_ORIENTATION] ?: 0
@@ -330,10 +335,10 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     private fun startTimer() {
         var i = 0
         timer = fixedRateTimer(period = 1000) {
-            watermark.text.text = "${i++}"
+            watermarkText.text = "${i++}"
             // TODO: animate it
-            watermark.img.x = Random.nextDouble(0.0, watermark.width.toDouble()).toFloat()
-            watermark.img.y = Random.nextDouble(0.0, watermark.height.toDouble()).toFloat()
+            watermarkImage.x = Random.nextDouble(0.0, watermark.width.toDouble()).toFloat()
+            watermarkImage.y = Random.nextDouble(0.0, watermark.height.toDouble()).toFloat()
             watermark.update()
         }
     }
@@ -402,7 +407,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
 
     private companion object {
 
-        val TAG = CameraActivity::class.java.simpleName
+        val TAG: String = CameraActivity::class.java.simpleName
 
         val PERMISSIONS = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
         const val REQUEST_CODE_PERMISSIONS = 0xCA
