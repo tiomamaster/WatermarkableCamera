@@ -30,6 +30,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.fixedRateTimer
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
@@ -52,7 +53,21 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     private var backgroundThread: HandlerThread? = null
     private var backgroundHandler: Handler? = null
 
-//    private var sensorOrientation = 0
+    private var sensorOrientation = 0
+    private var screenRotation = 0
+
+    private val orientationEventListener by lazy {
+        object : OrientationEventListener(this) {
+            val desired = arrayOf(0, 90, 180, 270, 360)
+            override fun onOrientationChanged(orientation: Int) {
+                screenRotation = desired.map { abs(it - orientation) }.run {
+                    desired[indexOf(min())].let {
+                        if (it == 360) 0 else it
+                    }
+                }
+            }
+        }
+    }
 
     private var cameraDevice: CameraDevice? = null
 
@@ -80,8 +95,6 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     private lateinit var captureRequestBuilder: CaptureRequest.Builder
 
     private var captureSession: CameraCaptureSession? = null
-
-    private val rotation by lazy { /*display?.rotation*/Surface.ROTATION_0 }
 
     private val captureSessionCallback = object : CameraCaptureSession.StateCallback() {
         override fun onConfigured(session: CameraCaptureSession) {
@@ -146,6 +159,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         super.onResume()
         startBackgroundThread()
         rsv.resume()
+        orientationEventListener.enable()
     }
 
     override fun onPause() {
@@ -154,6 +168,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         stopBackgroundThread()
         renderer.releaseSurfaceTextures()
         rsv.pause()
+        orientationEventListener.disable()
     }
 
     private fun startBackgroundThread() {
@@ -215,7 +230,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
                     .get(CameraCharacteristics.LENS_FACING) == cameraFacing
             }
             val characteristics = cameraManager.getCameraCharacteristics(cameraId)
-//            sensorOrientation = characteristics[CameraCharacteristics.SENSOR_ORIENTATION] ?: 0
+            sensorOrientation = characteristics[CameraCharacteristics.SENSOR_ORIENTATION] ?: 0
             val configurationMap =
                 characteristics[CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP]
                     ?: throw RuntimeException("Cannot get available preview/video sizes")
@@ -231,11 +246,6 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             val previewAsp = previewSize.height * 1.0f / previewSize.width
             renderer.screenToPreviewAsp = if (screenAsp < previewAsp) screenAsp / previewAsp
             else previewAsp / screenAsp
-            renderer.rotation = when (rotation) {
-                Surface.ROTATION_90 -> 90f
-                Surface.ROTATION_270 -> -90f
-                else -> 0f
-            }
 
             cameraManager.openCamera(cameraId, cameraStateCallback, backgroundHandler)
         } catch (e: CameraAccessException) {
@@ -306,18 +316,18 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             btn.text = "Start"
             recording = false
         } else {
-//            val orientationHint = when (sensorOrientation) {
-//                SENSOR_ORIENTATION_DEFAULT_DEGREES -> DEFAULT_ORIENTATIONS[rotation]
-//                SENSOR_ORIENTATION_INVERSE_DEGREES -> INVERSE_ORIENTATIONS[rotation]
-//                else -> 0
-//            }
+            val orientationHint = when (sensorOrientation) {
+                SENSOR_ORIENTATION_DEFAULT_DEGREES -> screenRotation
+                SENSOR_ORIENTATION_INVERSE_DEGREES -> sensorOrientation - screenRotation
+                else -> 0
+            }
             try {
                 val (videoWidth, videoHeight) = if (rsv.width < rsv.height) WIDTH to HEIGHT else HEIGHT to WIDTH
                 rsv.initRecorder(
                     File(videoFilePath),
                     videoWidth,
                     videoHeight,
-//                    orientationHint,
+                    orientationHint,
                     null,
                     null
                 )
@@ -412,20 +422,8 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         val PERMISSIONS = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
         const val REQUEST_CODE_PERMISSIONS = 0xCA
 
-//        const val SENSOR_ORIENTATION_DEFAULT_DEGREES = 90
-//        const val SENSOR_ORIENTATION_INVERSE_DEGREES = 270
-//        val DEFAULT_ORIENTATIONS = SparseIntArray().apply {
-//            append(Surface.ROTATION_0, 90)
-//            append(Surface.ROTATION_90, 0)
-//            append(Surface.ROTATION_180, 270)
-//            append(Surface.ROTATION_270, 180)
-//        }
-//        val INVERSE_ORIENTATIONS = SparseIntArray().apply {
-//            append(Surface.ROTATION_0, 270)
-//            append(Surface.ROTATION_90, 180)
-//            append(Surface.ROTATION_180, 90)
-//            append(Surface.ROTATION_270, 0)
-//        }
+        const val SENSOR_ORIENTATION_DEFAULT_DEGREES = 90
+        const val SENSOR_ORIENTATION_INVERSE_DEGREES = 270
 
         const val WIDTH = 720
         const val HEIGHT = 1280

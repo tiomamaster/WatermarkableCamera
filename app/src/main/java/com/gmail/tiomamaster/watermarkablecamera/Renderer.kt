@@ -22,10 +22,7 @@ class Renderer(
 
     private val listener = WeakReference(listener)
 
-    var ready = false
-
     var screenToPreviewAsp = 1f
-    var rotation = 0f
 
     var cameraSurfaceTexture: SurfaceTexture? = null
     private var camFrameAvailableRegistered = false
@@ -75,8 +72,8 @@ class Renderer(
     }
 
     override fun onSurfaceCreated() {
-        initGlComponents()
-        ready = true
+        setupTextures()
+        createProgram()
     }
 
     override fun onSurfaceChanged(width: Int, height: Int) {
@@ -85,14 +82,6 @@ class Renderer(
 
     override fun onSurfaceDestroyed() {
         cleanupGlComponents()
-        ready = false
-    }
-
-    private fun initGlComponents() {
-        setupTextures()
-        createProgram()
-
-        listener.get()?.onRendererReady()
     }
 
     private fun setupTextures() {
@@ -165,7 +154,9 @@ class Renderer(
         withGlErrorChecking("Delete program") { gl2.glDeleteProgram(program) }
     }
 
-    override fun onContextCreated() = Unit
+    override fun onContextCreated() {
+        listener.get()?.onRendererReady()
+    }
 
     override fun onPreDrawFrame() {
         if (!camFrameAvailableRegistered) {
@@ -204,7 +195,7 @@ class Renderer(
         )
         val rotateMatrix = FloatArray(16).apply {
             Matrix.setIdentityM(this, 0)
-            Matrix.rotateM(this, 0, rotation, 0f, 0f, 1f)
+            Matrix.rotateM(this, 0, 0f, 0f, 0f, 1f)
         }
         val mvpMatrix = FloatArray(16)
         Matrix.multiplyMM(mvpMatrix, 0, rotateMatrix, 0, orthoMatrix, 0)
