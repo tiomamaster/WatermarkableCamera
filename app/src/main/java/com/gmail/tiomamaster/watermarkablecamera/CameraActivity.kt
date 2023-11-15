@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
+import android.util.Range
 import android.util.Size
 import android.view.*
 import android.widget.Toast
@@ -31,6 +32,8 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.fixedRateTimer
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
@@ -41,7 +44,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     private lateinit var watermark: WatermarkView
     private lateinit var watermarkText: AppCompatTextView
     private lateinit var watermarkImage: AppCompatImageView
-    private lateinit var rsv: RecordableSurfaceView
+    private lateinit var rsv: KRecordableSurfaceView
     private lateinit var btnStartStop: MaterialButton
     private lateinit var btnChangeCamera: MaterialButton
     private lateinit var timer: Timer
@@ -101,7 +104,8 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             if (cameraDevice == null) return
             captureSession = session
             captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
-            session.setRepeatingRequest(captureRequestBuilder.build(), null, null)
+            captureRequestBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(30, 30))
+            session.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler)
 
             btnStartStop.setOnClickListener(::startStopRecording)
             btnChangeCamera.setOnClickListener(::changeCamera)
@@ -152,13 +156,13 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         }
 
         renderer = Renderer(applicationContext, this)
-        rsv.rendererCallbacks = renderer
+        rsv.renderer = renderer
     }
 
     override fun onResume() {
         super.onResume()
         startBackgroundThread()
-        rsv.resume()
+//        rsv.resume()
         orientationEventListener.enable()
     }
 
@@ -167,7 +171,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         closeCamera()
         stopBackgroundThread()
         renderer.releaseSurfaceTextures()
-        rsv.pause()
+//        rsv.pause()
         orientationEventListener.disable()
     }
 
@@ -234,18 +238,25 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             val configurationMap =
                 characteristics[CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP]
                     ?: throw RuntimeException("Cannot get available preview/video sizes")
-            val previewSize = choosePreviewSize(
+            val previewSize = /*Size(1920, 1080)*/ choosePreviewSize(
                 configurationMap.getOutputSizes(SurfaceTexture::class.java),
                 rsv.width,
                 rsv.height
             )
             renderer.setupCameraSurfaceTexture(previewSize.width, previewSize.height)
+            renderer.cameraSurfaceTexture?.setOnFrameAvailableListener(rsv.renderHandler)
 
             val screenAsp = if (rsv.width < rsv.height) rsv.width * 1.0f / rsv.height
             else rsv.height * 1.0f / rsv.width
             val previewAsp = previewSize.height * 1.0f / previewSize.width
-            renderer.screenToPreviewAsp = if (screenAsp < previewAsp) screenAsp / previewAsp
+            val screenToPreviewAsp = if (screenAsp < previewAsp) screenAsp / previewAsp
             else previewAsp / screenAsp
+            val w =
+                min(rsv.width, rsv.height) / min(previewSize.width, previewSize.height).toFloat()
+            val h =
+                max(rsv.width, rsv.height) / max(previewSize.width, previewSize.height).toFloat()
+            renderer.transformWidth = screenToPreviewAsp
+            renderer.transformHeight = h * (screenToPreviewAsp / w)
 
             cameraManager.openCamera(cameraId, cameraStateCallback, backgroundHandler)
         } catch (e: CameraAccessException) {
@@ -322,14 +333,13 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
                 else -> 0
             }
             try {
-                val (videoWidth, videoHeight) = if (rsv.width < rsv.height) WIDTH to HEIGHT else HEIGHT to WIDTH
+                val (videoWidth, videoHeight) = if (rsv.width < rsv.height) WIDTH to HEIGHT
+                else HEIGHT to WIDTH
                 rsv.initRecorder(
                     File(videoFilePath),
                     videoWidth,
                     videoHeight,
-                    orientationHint,
-                    null,
-                    null
+                    orientationHint
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Couldn't re-init recording", e)
@@ -365,8 +375,8 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             btnChangeCamera.text = "front"
             CameraCharacteristics.LENS_FACING_BACK
         }
-        closeCamera()
         renderer.releaseCameraSurfaceTexture()
+        closeCamera()
         openCamera()
     }
 

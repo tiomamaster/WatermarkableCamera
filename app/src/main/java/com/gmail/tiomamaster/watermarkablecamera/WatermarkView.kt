@@ -21,12 +21,11 @@ class WatermarkView @JvmOverloads constructor(
     fun update() {
         if (surface == null) return
         try {
-            val surfaceCanvas = surface?.lockCanvas(null)
-            surfaceCanvas?.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
-
             measure(widthMeasureSpec, heightMeasureSpec)
             layout(0, 0, measuredWidth, measuredHeight)
 
+            val surfaceCanvas = surface?.lockCanvas(null)
+            surfaceCanvas?.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
             super.draw(surfaceCanvas!!)
             surface?.unlockCanvasAndPost(surfaceCanvas)
         } catch (e: Exception) {

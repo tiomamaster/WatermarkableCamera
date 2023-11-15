@@ -7,7 +7,7 @@
     android:background="@android:color/black"
     tools:context=".CameraActivity">
 
-    <com.gmail.tiomamaster.watermarkablecamera.RecordableSurfaceView
+    <com.gmail.tiomamaster.watermarkablecamera.KRecordableSurfaceView
         android:id="@+id/rsv"
         android:layout_width="0dp"
         android:layout_height="0dp"

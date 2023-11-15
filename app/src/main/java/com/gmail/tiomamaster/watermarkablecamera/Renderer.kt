@@ -15,18 +15,14 @@ import java.nio.FloatBuffer
 import java.nio.ShortBuffer
 import android.opengl.GLES20 as gl2
 
-class Renderer(
-    private val context: Context,
-    listener: StateListener
-) : RecordableSurfaceView.RendererCallbacks {
+class Renderer(private val context: Context, listener: StateListener) {
 
     private val listener = WeakReference(listener)
 
-    var screenToPreviewAsp = 1f
+    var transformWidth = 1f
+    var transformHeight = 1f
 
     var cameraSurfaceTexture: SurfaceTexture? = null
-    private var camFrameAvailableRegistered = false
-    private var cameraRefreshCount = 0
     private val cameraTransformMatrix = FloatArray(16)
 
     var watermarkSurfaceTexture: SurfaceTexture? = null
@@ -55,6 +51,10 @@ class Renderer(
     fun setupWatermarkSurfaceTexture(width: Int, height: Int) {
         watermarkSurfaceTexture = SurfaceTexture(textureIds[1]).apply {
             setDefaultBufferSize(width, height)
+            setOnFrameAvailableListener {
+                Log.d(TAG, "Watermark frame available on thread ${Thread.currentThread()}")
+                needUpdateWatermarkTexture = true
+            }
         }
     }
 
@@ -66,21 +66,17 @@ class Renderer(
     }
 
     fun releaseCameraSurfaceTexture() {
+        cameraSurfaceTexture?.setOnFrameAvailableListener(null)
         cameraSurfaceTexture?.release()
         cameraSurfaceTexture = null
-        camFrameAvailableRegistered = false
     }
 
-    override fun onSurfaceCreated() {
+    fun onSurfaceCreated() {
         setupTextures()
         createProgram()
     }
 
-    override fun onSurfaceChanged(width: Int, height: Int) {
-        // TODO: ???
-    }
-
-    override fun onSurfaceDestroyed() {
+    fun onSurfaceDestroyed() {
         cleanupGlComponents()
     }
 
@@ -154,31 +150,11 @@ class Renderer(
         withGlErrorChecking("Delete program") { gl2.glDeleteProgram(program) }
     }
 
-    override fun onContextCreated() {
+    fun onContextCreated() {
         listener.get()?.onRendererReady()
     }
 
-    override fun onPreDrawFrame() {
-        if (!camFrameAvailableRegistered) {
-            cameraSurfaceTexture?.apply {
-                setOnFrameAvailableListener {
-                    getTransformMatrix(cameraTransformMatrix)
-                    cameraRefreshCount++
-                }
-                camFrameAvailableRegistered = true
-            }
-        }
-        if (!watFrameAvailableRegistered) {
-            watermarkSurfaceTexture?.apply {
-                setOnFrameAvailableListener {
-                    needUpdateWatermarkTexture = true
-                }
-                watFrameAvailableRegistered = true
-            }
-        }
-    }
-
-    override fun onDrawFrame() {
+    fun onDrawFrame() {
         gl2.glEnable(gl2.GL_BLEND)
         gl2.glBlendFunc(gl2.GL_ONE, gl2.GL_ONE_MINUS_SRC_ALPHA)
 
@@ -186,10 +162,10 @@ class Renderer(
         Matrix.orthoM(
             orthoMatrix,
             0,
-            -screenToPreviewAsp,
-            screenToPreviewAsp,
-            -1f,
-            1f,
+            -transformWidth,
+            transformWidth,
+            -transformHeight,
+            transformHeight,
             -1f,
             1f
         )
@@ -201,6 +177,7 @@ class Renderer(
         Matrix.multiplyMM(mvpMatrix, 0, rotateMatrix, 0, orthoMatrix, 0)
         drawCamera(mvpMatrix)
 
+        if (!needUpdateWatermarkTexture) return
         Matrix.orthoM(
             mvpMatrix,
             0,
@@ -215,13 +192,7 @@ class Renderer(
     }
 
     private fun drawCamera(mvpMatrix: FloatArray) {
-        // call updateTexImage() exactly the same count as onFrameAvailable listener was triggered
-        // onFrameAvailable won't trigger if skip some updates
-        while (cameraRefreshCount > 0) {
-            cameraSurfaceTexture?.updateTexImage()
-            cameraRefreshCount--
-        }
-
+        cameraSurfaceTexture?.getTransformMatrix(cameraTransformMatrix)
         gl2.glUniformMatrix4fv(textureTransformHandle, 1, false, cameraTransformMatrix, 0)
 
         gl2.glActiveTexture(gl2.GL_TEXTURE0)
@@ -234,7 +205,7 @@ class Renderer(
     }
 
     private fun drawWatermark(mvpMatrix: FloatArray) {
-        if (needUpdateWatermarkTexture) watermarkSurfaceTexture?.updateTexImage()
+        watermarkSurfaceTexture?.updateTexImage()
         watermarkSurfaceTexture?.getTransformMatrix(watermarkTransformMatrix)
 
         gl2.glUniformMatrix4fv(textureTransformHandle, 1, false, watermarkTransformMatrix, 0)
