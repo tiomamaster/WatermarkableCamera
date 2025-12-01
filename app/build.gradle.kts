@@ -16,6 +16,13 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = libs.versions.versionCode.get().toInt()
         versionName = libs.versions.versionName.get()
+
+        externalNativeBuild {
+            cmake {
+                // Available arguments are inside ${SDK}/cmake/.../android.toolchain.cmake file
+                arguments += "-DANDROID_STL=c++_shared"
+            }
+        }
     }
     buildTypes {
         release {
@@ -28,6 +35,14 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+    externalNativeBuild {
+        cmake {
+            path("src/main/cpp/CMakeLists.txt")
+        }
+    }
+    buildFeatures {
+        prefab = true
+    }
 }
 
 dependencies {
@@ -35,4 +50,5 @@ dependencies {
     implementation(libs.android.coreKtx)
     implementation(libs.android.constraintLayout)
     implementation(libs.android.material)
+    implementation(libs.android.gamesActivity)
 }
