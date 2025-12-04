@@ -29,7 +29,28 @@ set(CMAKE_CXX_FLAGS "-Wall")
 
 add_definitions(-DVK_USE_PLATFORM_ANDROID_KHR=1)
 
-add_library(${PROJECT_NAME} SHARED main.cpp hellovk.cpp)
+find_program(SLANGC_EXECUTABLE slangc HINTS $ENV{VULKAN_SDK}/bin REQUIRED)
+
+function(add_slang_shader_target TARGET)
+    cmake_parse_arguments("SHADER" "" "" "SOURCES" ${ARGN})
+    set(SHADERS_DIR ${CMAKE_CURRENT_LIST_DIR}/shaders)
+    set(SHADERS_OUT_DIR "${CMAKE_CURRENT_LIST_DIR}/../assets/shaders")
+    set(ENTRY_POINTS -entry vertMain -entry fragMain)
+    add_custom_command(OUTPUT ${SHADERS_OUT_DIR}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADERS_OUT_DIR})
+    add_custom_command(
+            OUTPUT ${SHADERS_OUT_DIR}/slang.spv
+            COMMAND
+            ${SLANGC_EXECUTABLE} ${SHADER_SOURCES} -target spirv -profile spirv_1_4
+            -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o slang.spv
+            WORKING_DIRECTORY ${SHADERS_OUT_DIR}
+            DEPENDS ${SHADERS_OUT_DIR} ${SHADER_SOURCES}
+            COMMENT "Compiling Slang Shaders"
+            VERBATIM)
+    add_custom_target(${TARGET} DEPENDS ${SHADERS_OUT_DIR}/slang.spv)
+endfunction()
+
+add_library(${PROJECT_NAME} SHARED main.cpp)
 
 # add lib dependencies
 target_link_libraries(${PROJECT_NAME} PUBLIC
@@ -40,6 +61,10 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
         log
         glm)
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/_deps/stb-src)
+add_slang_shader_target(main_slang_shader SOURCES
+        ${CMAKE_CURRENT_LIST_DIR}/shaders/shader.slang)
+add_dependencies(${PROJECT_NAME} main_slang_shader)
+
 target_compile_definitions(${PROJECT_NAME}
         PUBLIC VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 VULKAN_HPP_NO_STRUCT_CONSTRUCTORS=1)
 
