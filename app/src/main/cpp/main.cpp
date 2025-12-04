@@ -1,41 +1,73 @@
-#include <game-activity/GameActivity.h>
 #include <game-activity/native_app_glue/android_native_app_glue.h>
-#include <android/log.h>
-#include <cstring>
 
-// Define logging macros
-#define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, "VulkanTutorial", __VA_ARGS__))
-#define LOGW(...) ((void)__android_log_print(ANDROID_LOG_WARN, "VulkanTutorial", __VA_ARGS__))
-#define LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR, "VulkanTutorial", __VA_ARGS__))
+#include "hellovk.hpp"
 
-// Forward declaration of the main entry point
-extern "C" void android_main(struct android_app *app);
+struct AppState {
+    android_app *androidApp = nullptr;
+    VulkanApplication *vkApp = nullptr;
+    bool canRender = false;
+};
 
-// GameActivity entry point
-//extern "C" {
-//// This is the function the GameActivity library will call.
-//// Ensure its signature matches what GameActivity expects:
-//// void GameActivity_onCreate(GameActivity* activity, void* savedState, size_t savedStateSize)
-//void GameActivity_onCreate(GameActivity *activity, void *savedState, size_t savedStateSize) {
-//    LOGI("GameActivity_onCreate");
-//
-//    // Create an android_app structure
-//    android_app *app = new android_app(); // Consider using std::unique_ptr for better memory management
-//    memset(app, 0, sizeof(android_app));
-//
-//    // Set up the android_app structure
-//    app->activity = activity;
-//    app->window = nullptr; // Window will be provided later through onNativeWindowCreated callback
-//
-//    // Call the original android_main function
-//    android_main(app);
-//
-//    // Clean up
-//    // IMPORTANT: The lifetime of 'app' needs to be managed carefully.
-//    // If android_main runs asynchronously or expects 'app' to live longer,
-//    // deleting it here might be premature.
-//    // Consider the lifecycle of your native_app_glue integration.
-//    // For example, 'app' might need to be freed when the activity is destroyed.
-//    delete app;
-//}
-//}
+/**
+ * Called by the Android runtime whenever events happen so the
+ * app can react to it.
+ */
+static void handleAppCommand(android_app *app, int32_t cmd) {
+    auto *appState = static_cast<AppState *>(app->userData);
+
+    switch (cmd) {
+        case APP_CMD_START:
+            if (appState->androidApp->window != nullptr) {
+                appState->vkApp->reset(app->window, app->activity->assetManager);
+                appState->vkApp->initVulkan();
+                appState->canRender = true;
+            }
+        case APP_CMD_INIT_WINDOW:
+            // The window is being shown, get it ready.
+            LOGI("Called - APP_CMD_INIT_WINDOW");
+            if (appState->androidApp->window != nullptr) {
+                LOGI("Setting a new surface");
+                appState->vkApp->reset(app->window, app->activity->assetManager);
+                if (!appState->vkApp->initialized) {
+                    LOGI("Starting application");
+                    appState->vkApp->initVulkan();
+                }
+                appState->canRender = true;
+            }
+            break;
+        case APP_CMD_TERM_WINDOW:
+            // The window is being hidden or closed, clean it up.
+            appState->canRender = false;
+            break;
+        case APP_CMD_DESTROY:
+            // The window is being hidden or closed, clean it up.
+            LOGI("Destroying");
+            appState->vkApp->cleanup();
+        default:
+            break;
+    }
+}
+
+// Android main entry point required by the Android Glue library
+void android_main(struct android_app *app) {
+    AppState appState{};
+    VulkanApplication vkApp{};
+
+    appState.androidApp = app;
+    appState.vkApp = &vkApp;
+    app->userData = &appState;
+    app->onAppCmd = handleAppCommand;
+
+    int events;
+    android_poll_source *source;
+
+    while (app->destroyRequested == 0) {
+        while (ALooper_pollOnce(appState.canRender ? 0 : -1, nullptr, &events, (void **) &source) >= 0) {
+            if (source != nullptr) {
+                source->process(app, source);
+            }
+        }
+
+//        appState.vkApp->drawFrame();
+    }
+}

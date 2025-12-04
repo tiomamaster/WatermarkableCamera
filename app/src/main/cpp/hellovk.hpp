@@ -10,7 +10,7 @@
 #include <array>
 #include <chrono>
 #include <optional>
-#include <assert.h>
+#include <cassert>
 
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -26,18 +26,9 @@
 #include <stb_image.h>
 
 #include <android/log.h>
-#include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <android/asset_manager.h>
-#include <android/asset_manager_jni.h>
-
-// Declare and implement app_dummy function from native_app_glue
-//extern "C" void app_dummy() {
-//    // This is a dummy function that does nothing
-//    // It's used to prevent the linker from stripping out the native_app_glue code
-//}
-
-// Define AAssetManager type for Android
-typedef AAssetManager AssetManagerType;
+#include <android/native_window.h>
+#include <android/native_window_jni.h>
 
 // Define logging macros for Android
 #define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, "VulkanTutorial", __VA_ARGS__))
@@ -55,10 +46,7 @@ typedef AAssetManager AssetManagerType;
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
 
-constexpr uint32_t WIDTH = 800;
-constexpr uint32_t HEIGHT = 600;
 constexpr uint64_t FenceTimeout = 100000000;
-const std::string MODEL_PATH = "models/viking_room.obj";
 const std::string TEXTURE_PATH = "textures/viking_room.png";
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -84,15 +72,6 @@ struct VpProfileProperties {
 struct AppInfo {
     bool profileSupported = false;
     VpProfileProperties profile;
-};
-
-class VulkanApplication;
-
-struct AndroidAppState {
-    ANativeWindow *nativeWindow = nullptr;
-    bool initialized = false;
-    VulkanApplication* vkApp = nullptr;
-    android_app *app = nullptr;
 };
 
 #ifdef NDEBUG
@@ -137,8 +116,14 @@ struct UniformBufferObject {
     alignas(16) glm::mat4 proj;
 };
 
+struct ANativeWindowDeleter {
+    void operator()(ANativeWindow *window) {
+        ANativeWindow_release(window);
+    }
+};
+
 // Cross-platform file reading function
-std::vector<char> readFile(const std::string &filename, std::optional<AssetManagerType *> assetManager = std::nullopt) {
+std::vector<char> readFile(const std::string &filename, std::optional<AAssetManager *> assetManager = std::nullopt) {
     // On Android, use asset manager if provided
     if (assetManager.has_value() && *assetManager != nullptr) {
         // Open the asset
@@ -180,47 +165,94 @@ std::vector<char> readFile(const std::string &filename, std::optional<AssetManag
 
 class VulkanApplication {
 public:
-    VulkanApplication(android_app *app) : assetManager(app->activity->assetManager) {
-//        androidApp->userData = this;
-//        androidApp->onAppCmd = handleAppCommand;
-        // Note: onInputEvent is no longer a member of android_app in the current NDK version
-        // Input events are now handled differently
+    // Initialize Vulkan
+    void initVulkan() {
+        createInstance();
+        createSurface();
+        pickPhysicalDevice();
+        checkFeatureSupport();
+        createLogicalDevice();
+        createSwapChain();
+        createImageViews();
+        createRenderPass();
+        createDescriptorSetLayout();
+//        createGraphicsPipeline();
+//        createFramebuffers();
+//        createCommandPool();
+//        createTextureImage();
+//        createTextureImageView();
+//        createTextureSampler();
+//        createVertexBuffer();
+//        createIndexBuffer();
+//        createUniformBuffers();
+//        createDescriptorPool();
+//        createDescriptorSets();
+//        createCommandBuffers();
+//        createSyncObjects();
 
-        // Get the asset manager
-//        assetManager = androidApp->activity->assetManager;
+        initialized = true;
     }
 
-    void run(android_app *app) {
-        LOGI("run called");
-//        androidAppState.nativeWindow = app->window;
-        androidAppState.app = app;
-        androidAppState.vkApp = this;
-        app->userData = &androidAppState;
-        app->onAppCmd = handleAppCommand;
-        // Note: onInputEvent is no longer a member of android_app in the current NDK version
-        // Input events are now handled differently
+    // Draw frame
+    void drawFrame() {
+        static_cast<void>(device.waitForFences({*inFlightFences[currentFrame]}, VK_TRUE, FenceTimeout));
 
-        int events;
-        android_poll_source *source;
-
-        while (app->destroyRequested == 0) {
-            while (ALooper_pollOnce(androidAppState.initialized ? 0 : -1, nullptr, &events, (void **) &source) >= 0) {
-                if (source != nullptr) {
-                    source->process(app, source);
-                }
-            }
-
-//            if (androidAppState.initialized && androidAppState.nativeWindow != nullptr) {
-//                drawFrame();
-//            }
+        uint32_t imageIndex;
+        try {
+            auto [result, idx] = swapChain.acquireNextImage(FenceTimeout, *imageAvailableSemaphores[currentFrame]);
+            imageIndex = idx;
+        } catch (vk::OutOfDateKHRError &) {
+            recreateSwapChain();
+            return;
         }
 
-        cleanup();
+        // Update uniform buffer with current transformation
+        updateUniformBuffer(currentFrame);
+
+        device.resetFences({*inFlightFences[currentFrame]});
+
+        commandBuffers[currentFrame].reset();
+        recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+
+        vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+        const vk::SubmitInfo submitInfo{
+                .waitSemaphoreCount = 1,
+                .pWaitSemaphores = &*imageAvailableSemaphores[currentFrame],
+                .pWaitDstStageMask = &waitDestinationStageMask,
+                .commandBufferCount = 1,
+                .pCommandBuffers = &*commandBuffers[currentFrame],
+                .signalSemaphoreCount = 1,
+                .pSignalSemaphores = &*renderFinishedSemaphores[currentFrame]
+        };
+        queue.submit(submitInfo, *inFlightFences[currentFrame]);
+
+        const vk::PresentInfoKHR presentInfoKHR{
+                .waitSemaphoreCount = 1,
+                .pWaitSemaphores = &*renderFinishedSemaphores[currentFrame],
+                .swapchainCount = 1,
+                .pSwapchains = &*swapChain,
+                .pImageIndices = &imageIndex
+        };
+
+        vk::Result result;
+        try {
+            result = queue.presentKHR(presentInfoKHR);
+        } catch (vk::OutOfDateKHRError &) {
+            result = vk::Result::eErrorOutOfDateKHR;
+        }
+
+        if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || framebufferResized) {
+            framebufferResized = false;
+            recreateSwapChain();
+        } else if (result != vk::Result::eSuccess) {
+            throw std::runtime_error("Failed to present swap chain image");
+        }
+
+        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-
     void cleanup() {
-        if (androidAppState.initialized) {
+        if (initialized) {
             // Wait for device to finish operations
             if (*device) {
                 device.waitIdle();
@@ -229,17 +261,25 @@ public:
             // Cleanup resources
             cleanupSwapChain();
 
-            androidAppState.initialized = false;
+            initialized = false;
         }
     }
 
+    void reset(ANativeWindow *newWindow, AAssetManager *newManager) {
+        window.reset(newWindow);
+        assetManager = newManager;
+        if (initialized) {
+            createSurface();
+            recreateSwapChain();
+        }
+    }
+
+    bool initialized = false;
+
 private:
-    AndroidAppState androidAppState;
+    std::unique_ptr<ANativeWindow, ANativeWindowDeleter> window;
+    AAssetManager *assetManager = nullptr;
 
-//    android_app *androidApp = nullptr;
-    AssetManagerType *assetManager = nullptr;
-
-//    bool initialized = false;
     bool framebufferResized = false;
 
     // Vulkan objects
@@ -300,34 +340,6 @@ private:
             VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
-    // Initialize Vulkan
-    void initVulkan() {
-        createInstance();
-        createSurface();
-        pickPhysicalDevice();
-//        checkFeatureSupport();
-//        createLogicalDevice();
-//        createSwapChain();
-//        createImageViews();
-//        createRenderPass();
-//        createDescriptorSetLayout();
-//        createGraphicsPipeline();
-//        createFramebuffers();
-//        createCommandPool();
-//        createTextureImage();
-//        createTextureImageView();
-//        createTextureSampler();
-//        createVertexBuffer();
-//        createIndexBuffer();
-//        createUniformBuffers();
-//        createDescriptorPool();
-//        createDescriptorSets();
-//        createCommandBuffers();
-//        createSyncObjects();
-
-        androidAppState.initialized = true;
-    }
-
     // Create Vulkan instance
     void createInstance() {
         // Application info
@@ -361,7 +373,7 @@ private:
                 .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
                 .pNext = nullptr,
                 .flags = 0,
-                .window = androidAppState.nativeWindow
+                .window = window.get()
         };
 
         VkResult result = vkCreateAndroidSurfaceKHR(
@@ -642,7 +654,7 @@ private:
         // Load shader code from asset files
         LOGI("Loading shaders from assets");
 
-        std::optional<AssetManagerType *> optionalAssetManager = assetManager;
+        std::optional<AAssetManager *> optionalAssetManager = assetManager;
 
         std::vector<char> vertShaderCode = readFile("shaders/vert.spv", optionalAssetManager);
         std::vector<char> fragShaderCode = readFile("shaders/frag.spv", optionalAssetManager);
@@ -807,7 +819,7 @@ private:
         int texWidth, texHeight, texChannels;
         stbi_uc *pixels = nullptr;
 
-        std::optional<AssetManagerType *> optionalAssetManager = assetManager;
+        std::optional<AAssetManager *> optionalAssetManager = assetManager;
         std::vector<char> imageData = readFile(TEXTURE_PATH, optionalAssetManager);
         pixels = stbi_load_from_memory(
                 reinterpret_cast<const stbi_uc *>(imageData.data()),
@@ -1116,64 +1128,6 @@ private:
         commandBuffer.end();
     }
 
-    // Draw frame
-    void drawFrame() {
-        static_cast<void>(device.waitForFences({*inFlightFences[currentFrame]}, VK_TRUE, FenceTimeout));
-
-        uint32_t imageIndex;
-        try {
-            auto [result, idx] = swapChain.acquireNextImage(FenceTimeout, *imageAvailableSemaphores[currentFrame]);
-            imageIndex = idx;
-        } catch (vk::OutOfDateKHRError &) {
-            recreateSwapChain();
-            return;
-        }
-
-        // Update uniform buffer with current transformation
-        updateUniformBuffer(currentFrame);
-
-        device.resetFences({*inFlightFences[currentFrame]});
-
-        commandBuffers[currentFrame].reset();
-        recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
-
-        vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-        const vk::SubmitInfo submitInfo{
-                .waitSemaphoreCount = 1,
-                .pWaitSemaphores = &*imageAvailableSemaphores[currentFrame],
-                .pWaitDstStageMask = &waitDestinationStageMask,
-                .commandBufferCount = 1,
-                .pCommandBuffers = &*commandBuffers[currentFrame],
-                .signalSemaphoreCount = 1,
-                .pSignalSemaphores = &*renderFinishedSemaphores[currentFrame]
-        };
-        queue.submit(submitInfo, *inFlightFences[currentFrame]);
-
-        const vk::PresentInfoKHR presentInfoKHR{
-                .waitSemaphoreCount = 1,
-                .pWaitSemaphores = &*renderFinishedSemaphores[currentFrame],
-                .swapchainCount = 1,
-                .pSwapchains = &*swapChain,
-                .pImageIndices = &imageIndex
-        };
-
-        vk::Result result;
-        try {
-            result = queue.presentKHR(presentInfoKHR);
-        } catch (vk::OutOfDateKHRError &) {
-            result = vk::Result::eErrorOutOfDateKHR;
-        }
-
-        if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || framebufferResized) {
-            framebufferResized = false;
-            recreateSwapChain();
-        } else if (result != vk::Result::eSuccess) {
-            throw std::runtime_error("Failed to present swap chain image");
-        }
-
-        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-    }
-
     // Recreate swap chain
     void recreateSwapChain() {
         // Wait for device to finish operations
@@ -1246,8 +1200,8 @@ private:
         if (capabilities.currentExtent.width != 0xFFFFFFFF) {
             return capabilities.currentExtent;
         } else {
-            int32_t width = ANativeWindow_getWidth(androidAppState.nativeWindow);
-            int32_t height = ANativeWindow_getHeight(androidAppState.nativeWindow);
+            int32_t width = ANativeWindow_getWidth(window.get());
+            int32_t height = ANativeWindow_getHeight(window.get());
 
             vk::Extent2D actualExtent = {
                     static_cast<uint32_t>(width),
@@ -1493,61 +1447,4 @@ private:
         memcpy(data, &ubo, sizeof(ubo));
         uniformBuffersMemory[currentImage].unmapMemory();
     }
-
-    // Handle app commands
-    static void handleAppCommand(android_app *app, int32_t cmd) {
-        auto *appState = static_cast<AndroidAppState *>(app->userData);
-
-        switch (cmd) {
-            case APP_CMD_INIT_WINDOW:
-                if (app->window != nullptr) {
-                    appState->nativeWindow = app->window;
-                    appState->vkApp->initVulkan();
-                    // We can't cast AndroidAppState to VulkanApplication directly
-                    // Instead, we need to access the VulkanApplication instance through a global variable
-                    // or another mechanism. For now, we'll just set the initialized flag.
-//                    appState->initialized = true;
-                }
-                break;
-            case APP_CMD_TERM_WINDOW:
-                appState->nativeWindow = nullptr;
-                break;
-            default:
-                break;
-        }
-    }
-
-    static int32_t handleInputEvent(android_app *app, AInputEvent *event) {
-        if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION) {
-            float x = AMotionEvent_getX(event, 0);
-            float y = AMotionEvent_getY(event, 0);
-
-            LOGI("Touch at: %f, %f", x, y);
-
-            return 1;
-        }
-        return 0;
-    }
 };
-
-// Android main entry point
-void android_main(struct android_app *app) {
-    // Make sure glue isn't stripped
-//    app_dummy();
-//
-//    try {
-//        // Create and run the Vulkan application
-//        HelloTriangleApplication vulkanApp(app);
-//        vulkanApp.run(app);
-//    } catch (const std::exception &e) {
-//        LOGE("Exception caught: %s", e.what());
-//    }
-//    app_dummy();
-
-    try {
-        VulkanApplication vulkanApp(app);
-        vulkanApp.run(app);
-    } catch (const std::exception &e) {
-        LOGE("Exception caught: %s", e.what());
-    }
-}
