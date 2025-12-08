@@ -47,7 +47,7 @@
 #include <glm/gtx/hash.hpp>
 
 constexpr uint64_t FenceTimeout = 100000000;
-const std::string TEXTURE_PATH = "textures/viking_room.png";
+const std::string TEXTURE_PATH = "textures/texture.jpg";
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
 // Define VpProfileProperties structure if not already defined
@@ -176,11 +176,11 @@ public:
         createImageViews();
         createRenderPass();
         createDescriptorSetLayout();
-//        createGraphicsPipeline();
-//        createFramebuffers();
-//        createCommandPool();
-//        createTextureImage();
-//        createTextureImageView();
+        createGraphicsPipeline();
+        createFramebuffers();
+        createCommandPool();
+        createTextureImage();
+        createTextureImageView();
 //        createTextureSampler();
 //        createVertexBuffer();
 //        createIndexBuffer();
@@ -348,7 +348,7 @@ private:
                 .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
                 .pEngineName = "No Engine",
                 .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-                .apiVersion = VK_API_VERSION_1_3
+                .apiVersion = vk::ApiVersion11
         };
 
         // Get required extensions
@@ -483,7 +483,7 @@ private:
         float queuePriority = 1.0f;
         vk::DeviceQueueCreateInfo deviceQueueCreateInfo{.queueFamilyIndex = queueIndex, .queueCount = 1, .pQueuePriorities = &queuePriority};
 
-        if (appInfo.profileSupported) {
+        if (/*appInfo.profileSupported*/false) {
             // Enable required features
             vk::PhysicalDeviceFeatures2 features2;
             vk::PhysicalDeviceFeatures deviceFeatures{};
@@ -541,7 +541,8 @@ private:
                 .imageUsage       = vk::ImageUsageFlagBits::eColorAttachment,
                 .imageSharingMode = vk::SharingMode::eExclusive,
                 .preTransform     = swapChainSupport.capabilities.currentTransform,
-                .compositeAlpha   = vk::CompositeAlphaFlagBitsKHR::eOpaque,
+//                .compositeAlpha   = vk::CompositeAlphaFlagBitsKHR::eOpaque, - triggers validation error
+                .compositeAlpha   = vk::CompositeAlphaFlagBitsKHR::eInherit,
                 .presentMode      = chooseSwapPresentMode(swapChainSupport.presentModes),
                 .clipped          = true};
 
@@ -649,44 +650,70 @@ private:
         descriptorSetLayout = device.createDescriptorSetLayout(layoutInfo);
     }
 
+    [[nodiscard]] vk::raii::ShaderModule createShaderModule(const std::vector<char> &code) const {
+        vk::ShaderModuleCreateInfo createInfo{
+                .codeSize = code.size() * sizeof(char),
+                .pCode = reinterpret_cast<const uint32_t *>(code.data())};
+        vk::raii::ShaderModule shaderModule{device, createInfo};
+
+        return shaderModule;
+    }
+
     // Create graphics pipeline
     void createGraphicsPipeline() {
         // Load shader code from asset files
+//        LOGI("Loading shaders from assets");
+//
+//        std::optional<AAssetManager *> optionalAssetManager = assetManager;
+//
+//        std::vector<char> vertShaderCode = readFile("shaders/vert.spv", optionalAssetManager);
+//        std::vector<char> fragShaderCode = readFile("shaders/frag.spv", optionalAssetManager);
+//
+//        LOGI("Shaders loaded successfully");
+//
+//        // Create shader modules
+//        vk::ShaderModuleCreateInfo vertShaderModuleInfo{
+//                .codeSize = vertShaderCode.size(),
+//                .pCode = reinterpret_cast<const uint32_t *>(vertShaderCode.data())
+//        };
+//        vk::raii::ShaderModule vertShaderModule = device.createShaderModule(vertShaderModuleInfo);
+//
+//        vk::ShaderModuleCreateInfo fragShaderModuleInfo{
+//                .codeSize = fragShaderCode.size(),
+//                .pCode = reinterpret_cast<const uint32_t *>(fragShaderCode.data())
+//        };
+//        vk::raii::ShaderModule fragShaderModule = device.createShaderModule(fragShaderModuleInfo);
+//
+//        // Create shader stages
+//        vk::PipelineShaderStageCreateInfo shaderStages[] = {
+//                {
+//                        .stage = vk::ShaderStageFlagBits::eVertex,
+//                        .module = *vertShaderModule,
+//                        .pName = "main"
+//                },
+//                {
+//                        .stage = vk::ShaderStageFlagBits::eFragment,
+//                        .module = *fragShaderModule,
+//                        .pName = "main"
+//                }
+//        };
+
         LOGI("Loading shaders from assets");
 
         std::optional<AAssetManager *> optionalAssetManager = assetManager;
-
-        std::vector<char> vertShaderCode = readFile("shaders/vert.spv", optionalAssetManager);
-        std::vector<char> fragShaderCode = readFile("shaders/frag.spv", optionalAssetManager);
+        auto shaderModule = createShaderModule(readFile("shaders/slang.spv", optionalAssetManager));
 
         LOGI("Shaders loaded successfully");
 
-        // Create shader modules
-        vk::ShaderModuleCreateInfo vertShaderModuleInfo{
-                .codeSize = vertShaderCode.size(),
-                .pCode = reinterpret_cast<const uint32_t *>(vertShaderCode.data())
-        };
-        vk::raii::ShaderModule vertShaderModule = device.createShaderModule(vertShaderModuleInfo);
-
-        vk::ShaderModuleCreateInfo fragShaderModuleInfo{
-                .codeSize = fragShaderCode.size(),
-                .pCode = reinterpret_cast<const uint32_t *>(fragShaderCode.data())
-        };
-        vk::raii::ShaderModule fragShaderModule = device.createShaderModule(fragShaderModuleInfo);
-
-        // Create shader stages
-        vk::PipelineShaderStageCreateInfo shaderStages[] = {
-                {
-                        .stage = vk::ShaderStageFlagBits::eVertex,
-                        .module = *vertShaderModule,
-                        .pName = "main"
-                },
-                {
-                        .stage = vk::ShaderStageFlagBits::eFragment,
-                        .module = *fragShaderModule,
-                        .pName = "main"
-                }
-        };
+        vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
+                .stage = vk::ShaderStageFlagBits::eVertex,
+                .module = *shaderModule,
+                .pName = "vertMain"};
+        vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
+                .stage = vk::ShaderStageFlagBits::eFragment,
+                .module = *shaderModule,
+                .pName = "fragMain"};
+        vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
         // Vertex input
         auto bindingDescription = Vertex::getBindingDescription();
@@ -816,6 +843,7 @@ private:
     // Create texture image
     void createTextureImage() {
         // Load texture image
+        LOGI("Loading texture from assets");
         int texWidth, texHeight, texChannels;
         stbi_uc *pixels = nullptr;
 
@@ -831,7 +859,7 @@ private:
             throw std::runtime_error("Failed to load texture image: " + TEXTURE_PATH);
         }
 
-        LOG_INFO("Texture loaded successfully");
+        LOGI("Texture loaded successfully w = %i h = %i", texWidth, texHeight);
 
         vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
@@ -839,11 +867,14 @@ private:
         vk::raii::Buffer stagingBuffer = nullptr;
         vk::raii::DeviceMemory stagingBufferMemory = nullptr;
 
-        createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+        createBuffer(imageSize,
+                vk::BufferUsageFlagBits::eTransferSrc,
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                stagingBuffer,
+                stagingBufferMemory);
 
         // Copy pixel data to staging buffer
-        void *data;
-        data = stagingBufferMemory.mapMemory(0, imageSize);
+        void *data = stagingBufferMemory.mapMemory(0, imageSize);
         memcpy(data, pixels, static_cast<size_t>(imageSize));
         stagingBufferMemory.unmapMemory();
 
@@ -1146,21 +1177,21 @@ private:
     std::vector<const char *> getRequiredExtensions() {
 
         std::vector<const char *> extensions = {
-                VK_KHR_SURFACE_EXTENSION_NAME,
-                VK_KHR_ANDROID_SURFACE_EXTENSION_NAME
+                vk::KHRSurfaceExtensionName,
+                vk::KHRAndroidSurfaceExtensionName
         };
 
         // Check if the debug utils extension is available
-        std::vector<vk::ExtensionProperties> props = context.enumerateInstanceExtensionProperties();
-        bool debugUtilsAvailable = std::ranges::any_of(props,
-                [](vk::ExtensionProperties const &ep) {
-                    return strcmp(ep.extensionName, vk::EXTDebugUtilsExtensionName) == 0;
-                });
-
-        // Always include the debug utils extension if available
-        if (debugUtilsAvailable && enableValidationLayers) {
-            extensions.push_back(vk::EXTDebugUtilsExtensionName);
-        }
+//        std::vector<vk::ExtensionProperties> props = context.enumerateInstanceExtensionProperties();
+//        bool debugUtilsAvailable = std::ranges::any_of(props,
+//                [](vk::ExtensionProperties const &ep) {
+//                    return strcmp(ep.extensionName, vk::EXTDebugUtilsExtensionName) == 0;
+//                });
+//
+//        // Always include the debug utils extension if available
+//        if (debugUtilsAvailable && enableValidationLayers) {
+//            extensions.push_back(vk::EXTDebugUtilsExtensionName);
+//        }
 
         return extensions;
     }

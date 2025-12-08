@@ -41,7 +41,7 @@ function(add_slang_shader_target TARGET)
     add_custom_command(
             OUTPUT ${SHADERS_OUT_DIR}/slang.spv
             COMMAND
-            ${SLANGC_EXECUTABLE} ${SHADER_SOURCES} -target spirv -profile spirv_1_4
+            ${SLANGC_EXECUTABLE} ${SHADER_SOURCES} -target spirv -profile spirv_1_3
             -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o slang.spv
             WORKING_DIRECTORY ${SHADERS_OUT_DIR}
             DEPENDS ${SHADERS_OUT_DIR} ${SHADER_SOURCES}
