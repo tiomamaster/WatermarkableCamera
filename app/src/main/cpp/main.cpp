@@ -17,6 +17,7 @@ static void handleAppCommand(android_app *app, int32_t cmd) {
 
     switch (cmd) {
         case APP_CMD_START:
+            LOGI("Called - APP_CMD_START");
             if (appState->androidApp->window != nullptr) {
                 appState->vkApp->reset(app->window, app->activity->assetManager);
                 appState->vkApp->initVulkan();
@@ -68,6 +69,6 @@ void android_main(struct android_app *app) {
             }
         }
 
-//        appState.vkApp->drawFrame();
+        appState.vkApp->drawFrame();
     }
 }

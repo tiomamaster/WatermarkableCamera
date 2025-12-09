@@ -39,15 +39,15 @@ function(add_slang_shader_target TARGET)
     add_custom_command(OUTPUT ${SHADERS_OUT_DIR}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADERS_OUT_DIR})
     add_custom_command(
-            OUTPUT ${SHADERS_OUT_DIR}/slang.spv
+            OUTPUT ${SHADERS_OUT_DIR}/tex.spv
             COMMAND
             ${SLANGC_EXECUTABLE} ${SHADER_SOURCES} -target spirv -profile spirv_1_3
-            -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o slang.spv
+            -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o tex.spv
             WORKING_DIRECTORY ${SHADERS_OUT_DIR}
             DEPENDS ${SHADERS_OUT_DIR} ${SHADER_SOURCES}
             COMMENT "Compiling Slang Shaders"
             VERBATIM)
-    add_custom_target(${TARGET} DEPENDS ${SHADERS_OUT_DIR}/slang.spv)
+    add_custom_target(${TARGET} DEPENDS ${SHADERS_OUT_DIR}/tex.spv)
 endfunction()
 
 add_library(${PROJECT_NAME} SHARED main.cpp)
@@ -62,7 +62,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
         glm)
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/_deps/stb-src)
 add_slang_shader_target(main_slang_shader SOURCES
-        ${CMAKE_CURRENT_LIST_DIR}/shaders/shader.slang)
+        ${CMAKE_CURRENT_LIST_DIR}/shaders/tex.slang)
 add_dependencies(${PROJECT_NAME} main_slang_shader)
 
 target_compile_definitions(${PROJECT_NAME}

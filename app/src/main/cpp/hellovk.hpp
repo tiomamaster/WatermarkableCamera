@@ -81,7 +81,7 @@ constexpr bool enableValidationLayers = true;
 #endif
 
 struct Vertex {
-    glm::vec3 pos;
+    glm::vec2 pos;
     glm::vec3 color;
     glm::vec2 texCoord;
 
@@ -91,7 +91,7 @@ struct Vertex {
 
     static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions() {
         return {
-                vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, pos)),
+                vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, pos)),
                 vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
                 vk::VertexInputAttributeDescription(2, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, texCoord))
         };
@@ -99,14 +99,6 @@ struct Vertex {
 
     bool operator==(const Vertex &other) const {
         return pos == other.pos && color == other.color && texCoord == other.texCoord;
-    }
-};
-
-template<>
-struct std::hash<Vertex> {
-    size_t operator()(Vertex const &vertex) const noexcept {
-        return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ (
-                hash<glm::vec2>()(vertex.texCoord) << 1);
     }
 };
 
@@ -123,42 +115,23 @@ struct ANativeWindowDeleter {
 };
 
 // Cross-platform file reading function
-std::vector<char> readFile(const std::string &filename, std::optional<AAssetManager *> assetManager = std::nullopt) {
-    // On Android, use asset manager if provided
-    if (assetManager.has_value() && *assetManager != nullptr) {
-        // Open the asset
-        AAsset *asset = AAssetManager_open(*assetManager, filename.c_str(), AASSET_MODE_BUFFER);
-        if (!asset) {
-            LOGE("Failed to open asset: %s", filename.c_str());
-            throw std::runtime_error("Failed to open file: " + filename);
-        }
-
-        // Get the file size
-        off_t fileSize = AAsset_getLength(asset);
-        std::vector<char> buffer(fileSize);
-
-        // Read the file data
-        AAsset_read(asset, buffer.data(), fileSize);
-
-        // Close the asset
-        AAsset_close(asset);
-
-        return buffer;
-    }
-
-    // Desktop version or Android fallback to filesystem
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-    if (!file.is_open()) {
+std::vector<char> readFile(const std::string &filename, AAssetManager *assetManager) {
+    // Open the asset
+    AAsset *asset = AAssetManager_open(assetManager, filename.c_str(), AASSET_MODE_BUFFER);
+    if (!asset) {
+        LOGE("Failed to open asset: %s", filename.c_str());
         throw std::runtime_error("Failed to open file: " + filename);
     }
 
-    size_t fileSize = static_cast<size_t>(file.tellg());
+    // Get the file size
+    off_t fileSize = AAsset_getLength(asset);
     std::vector<char> buffer(fileSize);
 
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);
-    file.close();
+    // Read the file data
+    AAsset_read(asset, buffer.data(), fileSize);
+
+    // Close the asset
+    AAsset_close(asset);
 
     return buffer;
 }
@@ -181,14 +154,14 @@ public:
         createCommandPool();
         createTextureImage();
         createTextureImageView();
-//        createTextureSampler();
-//        createVertexBuffer();
-//        createIndexBuffer();
-//        createUniformBuffers();
-//        createDescriptorPool();
-//        createDescriptorSets();
-//        createCommandBuffers();
-//        createSyncObjects();
+        createTextureSampler();
+        createVertexBuffer();
+        createIndexBuffer();
+        createUniformBuffers();
+        createDescriptorPool();
+        createDescriptorSets();
+        createCommandBuffers();
+        createSyncObjects();
 
         initialized = true;
     }
@@ -289,6 +262,7 @@ private:
     vk::raii::SurfaceKHR surface = nullptr;
     vk::raii::PhysicalDevice physicalDevice = nullptr;
     vk::raii::Device device = nullptr;
+    // todo: separate to transfer and graphics queues
     uint32_t queueIndex = ~0;
     vk::raii::Queue queue = nullptr;
     vk::raii::SwapchainKHR swapChain = nullptr;
@@ -325,8 +299,15 @@ private:
     AppInfo appInfo;
 
     // Model data
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
+    const std::vector<Vertex> vertices = {
+            {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+            {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+            {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+            {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
+    };
+
+    const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
+
 
     // Swap chain support details
     struct SwapChainSupportDetails {
@@ -700,8 +681,7 @@ private:
 
         LOGI("Loading shaders from assets");
 
-        std::optional<AAssetManager *> optionalAssetManager = assetManager;
-        auto shaderModule = createShaderModule(readFile("shaders/slang.spv", optionalAssetManager));
+        auto shaderModule = createShaderModule(readFile("shaders/tex.spv", assetManager));
 
         LOGI("Shaders loaded successfully");
 
@@ -744,7 +724,7 @@ private:
                 .rasterizerDiscardEnable = VK_FALSE,
                 .polygonMode = vk::PolygonMode::eFill,
                 .cullMode = vk::CullModeFlagBits::eBack,
-                .frontFace = vk::FrontFace::eCounterClockwise,
+                .frontFace = vk::FrontFace::eClockwise,
                 .depthBiasEnable = VK_FALSE,
                 .lineWidth = 1.0f
         };
@@ -847,8 +827,7 @@ private:
         int texWidth, texHeight, texChannels;
         stbi_uc *pixels = nullptr;
 
-        std::optional<AAssetManager *> optionalAssetManager = assetManager;
-        std::vector<char> imageData = readFile(TEXTURE_PATH, optionalAssetManager);
+        std::vector<char> imageData = readFile(TEXTURE_PATH, assetManager);
         pixels = stbi_load_from_memory(
                 reinterpret_cast<const stbi_uc *>(imageData.data()),
                 static_cast<int>(imageData.size()),
@@ -915,6 +894,7 @@ private:
         textureImage.bindMemory(*textureImageMemory, 0);
 
         // Transition image layout and copy buffer to image
+        // todo: see how in desktop tutor
         transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
         copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
         transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
@@ -927,6 +907,7 @@ private:
 
     // Create texture sampler
     void createTextureSampler() {
+        vk::PhysicalDeviceProperties properties = physicalDevice.getProperties();
         vk::SamplerCreateInfo samplerInfo{
                 .magFilter = vk::Filter::eLinear,
                 .minFilter = vk::Filter::eLinear,
@@ -935,7 +916,7 @@ private:
                 .addressModeV = vk::SamplerAddressMode::eRepeat,
                 .addressModeW = vk::SamplerAddressMode::eRepeat,
                 .anisotropyEnable = VK_TRUE,
-                .maxAnisotropy = 16.0f,
+                .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
                 .compareEnable = VK_FALSE,
                 .compareOp = vk::CompareOp::eAlways,
                 .borderColor = vk::BorderColor::eIntOpaqueBlack,
@@ -946,6 +927,7 @@ private:
     }
 
     // Create vertex buffer
+    // todo: combine these in one buffer
     void createVertexBuffer() {
         vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
@@ -953,8 +935,7 @@ private:
         vk::raii::DeviceMemory stagingBufferMemory = nullptr;
         createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
 
-        void *data;
-        data = stagingBufferMemory.mapMemory(0, bufferSize);
+        void *data = stagingBufferMemory.mapMemory(0, bufferSize);
         memcpy(data, vertices.data(), (size_t) bufferSize);
         stagingBufferMemory.unmapMemory();
 
@@ -971,8 +952,7 @@ private:
         vk::raii::DeviceMemory stagingBufferMemory = nullptr;
         createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
 
-        void *data;
-        data = stagingBufferMemory.mapMemory(0, bufferSize);
+        void *data = stagingBufferMemory.mapMemory(0, bufferSize);
         memcpy(data, indices.data(), (size_t) bufferSize);
         stagingBufferMemory.unmapMemory();
 
@@ -988,6 +968,7 @@ private:
         uniformBuffers.clear();
         uniformBuffersMemory.clear();
 
+        // todo: see desktop tutor
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             uniformBuffers.push_back(nullptr);
             uniformBuffersMemory.push_back(nullptr);
@@ -1012,6 +993,7 @@ private:
         };
 
         vk::DescriptorPoolCreateInfo poolInfo{
+//                .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, // desktop flag
                 .maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
                 .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
                 .pPoolSizes = poolSizes.data()
@@ -1151,7 +1133,7 @@ private:
         commandBuffer.setScissor(0, scissor);
 
         commandBuffer.bindVertexBuffers(0, {*vertexBuffer}, {0});
-        commandBuffer.bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint32);
+        commandBuffer.bindIndexBuffer(*indexBuffer, 0, vk::IndexTypeValue<decltype(indices)::value_type>::value);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, {*descriptorSets[currentFrame]}, nullptr);
         commandBuffer.drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
@@ -1465,16 +1447,28 @@ private:
         static auto startTime = std::chrono::high_resolution_clock::now();
 
         auto currentTime = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+        float time = std::chrono::duration<float>(currentTime - startTime).count();
+
+        auto angle = time * glm::radians(45.0f);
+        static const float maxEyeY = 3.0f;
+        float eyeY = 0.0f;
+        int i = static_cast<int>(time * maxEyeY) / static_cast<int>(maxEyeY);
+        if (i % 2 == 0)
+            eyeY = time * maxEyeY - i * maxEyeY;
+        else
+            eyeY = maxEyeY - (time * maxEyeY - i * maxEyeY);
 
         UniformBufferObject ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, 0.1f, 10.0f);
-        ubo.proj[1][1] *= -1;
+        ubo.model = glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = glm::lookAt(glm::vec3(0.0f, eyeY, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+                glm::vec3(0.0f, 1.0f, 0.0f));
+        ubo.proj = glm::perspective(
+                glm::radians(45.0f),
+                static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height),
+                0.1f, 10.0f);
+//         ubo.proj[1][1] *= -1;
 
-        void *data;
-        data = uniformBuffersMemory[currentImage].mapMemory(0, sizeof(ubo));
+        void *data = uniformBuffersMemory[currentImage].mapMemory(0, sizeof(ubo));
         memcpy(data, &ubo, sizeof(ubo));
         uniformBuffersMemory[currentImage].unmapMemory();
     }
