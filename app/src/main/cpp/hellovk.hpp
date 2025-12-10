@@ -424,7 +424,7 @@ private:
         };
 
         // Check if the profile is supported
-        VkBool32 supported = VK_FALSE;
+        VkBool32 supported = vk::False;
 
         // Create a vp::ProfileDesc from our VpProfileProperties
         vp::ProfileDesc profileDesc = {
@@ -439,7 +439,7 @@ private:
                 &supported        // Output parameter for support status
         );
 
-        if (result && supported == VK_TRUE) {
+        if (result && supported == vk::True) {
             appInfo.profileSupported = true;
             LOGI("Using KHR roadmap 2022 profile");
         } else {
@@ -472,13 +472,13 @@ private:
             // Enable required features
             vk::PhysicalDeviceFeatures2 features2;
             vk::PhysicalDeviceFeatures deviceFeatures{};
-            deviceFeatures.samplerAnisotropy = VK_TRUE;
-            deviceFeatures.sampleRateShading = VK_TRUE;
+            deviceFeatures.samplerAnisotropy = vk::True;
+            deviceFeatures.sampleRateShading = vk::True;
             features2.features = deviceFeatures;
 
             // Enable dynamic rendering
             vk::PhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures;
-            dynamicRenderingFeatures.dynamicRendering = VK_TRUE;
+            dynamicRenderingFeatures.dynamicRendering = vk::True;
             features2.pNext = &dynamicRenderingFeatures;
 
             // Create a vk::DeviceCreateInfo with the required features
@@ -495,8 +495,8 @@ private:
         } else {
             // Fallback to manual device creation
             vk::PhysicalDeviceFeatures deviceFeatures{};
-            deviceFeatures.samplerAnisotropy = VK_TRUE;
-            deviceFeatures.sampleRateShading = VK_TRUE;
+            deviceFeatures.samplerAnisotropy = vk::True;
+            deviceFeatures.sampleRateShading = vk::True;
 
             vk::DeviceCreateInfo createInfo{
                     .queueCreateInfoCount = 1,
@@ -526,7 +526,6 @@ private:
                 .imageUsage       = vk::ImageUsageFlagBits::eColorAttachment,
                 .imageSharingMode = vk::SharingMode::eExclusive,
                 .preTransform     = swapChainSupport.capabilities.currentTransform,
-//                .compositeAlpha   = vk::CompositeAlphaFlagBitsKHR::eOpaque, - triggers validation error
                 .compositeAlpha   = vk::CompositeAlphaFlagBitsKHR::eInherit,
                 .presentMode      = chooseSwapPresentMode(swapChainSupport.presentModes),
                 .clipped          = true};
@@ -713,7 +712,7 @@ private:
         // Input assembly
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
                 .topology = vk::PrimitiveTopology::eTriangleList,
-                .primitiveRestartEnable = VK_FALSE
+                .primitiveRestartEnable = vk::False
         };
 
         // Viewport and scissor
@@ -724,29 +723,29 @@ private:
 
         // Rasterization
         vk::PipelineRasterizationStateCreateInfo rasterizer{
-                .depthClampEnable = VK_FALSE,
-                .rasterizerDiscardEnable = VK_FALSE,
+                .depthClampEnable = vk::False,
+                .rasterizerDiscardEnable = vk::False,
                 .polygonMode = vk::PolygonMode::eFill,
                 .cullMode = vk::CullModeFlagBits::eBack,
                 .frontFace = vk::FrontFace::eClockwise,
-                .depthBiasEnable = VK_FALSE,
+                .depthBiasEnable = vk::False,
                 .lineWidth = 1.0f
         };
 
         // Multisampling
         vk::PipelineMultisampleStateCreateInfo multisampling{
                 .rasterizationSamples = vk::SampleCountFlagBits::e1,
-                .sampleShadingEnable = VK_FALSE
+                .sampleShadingEnable = vk::False
         };
 
         // Color blending
         vk::PipelineColorBlendAttachmentState colorBlendAttachment{
-                .blendEnable = VK_FALSE,
+                .blendEnable = vk::False,
                 .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA
         };
 
         vk::PipelineColorBlendStateCreateInfo colorBlending{
-                .logicOpEnable = VK_FALSE,
+                .logicOpEnable = vk::False,
                 .logicOp = vk::LogicOp::eCopy,
                 .attachmentCount = 1,
                 .pAttachments = &colorBlendAttachment
@@ -869,7 +868,7 @@ private:
         // Create image
         vk::ImageCreateInfo imageInfo{
                 .imageType = vk::ImageType::e2D,
-                .format = vk::Format::eR8G8B8A8Srgb,
+                .format = vk::Format::eR8G8B8A8Unorm,
                 .extent = {
                         .width = static_cast<uint32_t>(texWidth),
                         .height = static_cast<uint32_t>(texHeight),
@@ -899,14 +898,14 @@ private:
 
         // Transition image layout and copy buffer to image
         // todo: see how in desktop tutor
-        transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+        transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Unorm, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
         copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-        transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+        transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Unorm, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
     }
 
     // Create texture image view
     void createTextureImageView() {
-        textureImageView = createImageView(textureImage, vk::Format::eR8G8B8A8Srgb);
+        textureImageView = createImageView(textureImage, vk::Format::eR8G8B8A8Unorm);
     }
 
     // Create texture sampler
@@ -919,12 +918,15 @@ private:
                 .addressModeU = vk::SamplerAddressMode::eRepeat,
                 .addressModeV = vk::SamplerAddressMode::eRepeat,
                 .addressModeW = vk::SamplerAddressMode::eRepeat,
-                .anisotropyEnable = VK_TRUE,
+                .mipLodBias = 0.0f,
+                .anisotropyEnable = vk::True,
                 .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
-                .compareEnable = VK_FALSE,
+                .compareEnable = vk::False,
                 .compareOp = vk::CompareOp::eAlways,
+                .minLod = 0.0f,
+                .maxLod = vk::LodClampNone,
                 .borderColor = vk::BorderColor::eIntOpaqueBlack,
-                .unnormalizedCoordinates = VK_FALSE
+                .unnormalizedCoordinates = vk::False
         };
 
         textureSampler = device.createSampler(samplerInfo);
