@@ -18,11 +18,12 @@ static void handleAppCommand(android_app *app, int32_t cmd) {
     switch (cmd) {
         case APP_CMD_START:
             LOGI("Called - APP_CMD_START");
-            if (appState->androidApp->window != nullptr) {
-                appState->vkApp->reset(app->window, app->activity->assetManager);
-                appState->vkApp->initVulkan();
-                appState->canRender = true;
-            }
+//            if (appState->androidApp->window != nullptr) {
+//                appState->vkApp->reset(app->window, app->activity->assetManager);
+//                appState->vkApp->initVulkan();
+//                appState->canRender = true;
+//            }
+            break;
         case APP_CMD_INIT_WINDOW:
             // The window is being shown, get it ready.
             LOGI("Called - APP_CMD_INIT_WINDOW");
@@ -38,6 +39,7 @@ static void handleAppCommand(android_app *app, int32_t cmd) {
             break;
         case APP_CMD_TERM_WINDOW:
             // The window is being hidden or closed, clean it up.
+            LOGI("Called - APP_CMD_TERM_WINDOW");
             appState->canRender = false;
             break;
         case APP_CMD_DESTROY:
@@ -50,7 +52,7 @@ static void handleAppCommand(android_app *app, int32_t cmd) {
 }
 
 // Android main entry point required by the Android Glue library
-void android_main(struct android_app *app) {
+[[maybe_unused]] void android_main(struct android_app *app) {
     AppState appState{};
     VulkanApplication vkApp{};
 

@@ -108,12 +108,6 @@ struct UniformBufferObject {
     alignas(16) glm::mat4 proj;
 };
 
-struct ANativeWindowDeleter {
-    void operator()(ANativeWindow *window) {
-        ANativeWindow_release(window);
-    }
-};
-
 // Cross-platform file reading function
 std::vector<char> readFile(const std::string &filename, AAssetManager *assetManager) {
     // Open the asset
@@ -242,18 +236,22 @@ public:
     }
 
     void reset(ANativeWindow *newWindow, AAssetManager *newManager) {
-        window.reset(newWindow);
+        window = newWindow;
         assetManager = newManager;
         if (initialized) {
+            device.waitIdle();
+            cleanupSwapChain();
             createSurface();
-            recreateSwapChain();
+            createSwapChain();
+            createImageViews();
+            createFramebuffers();
         }
     }
 
     bool initialized = false;
 
 private:
-    std::unique_ptr<ANativeWindow, ANativeWindowDeleter> window;
+    ANativeWindow *window = nullptr;
     AAssetManager *assetManager = nullptr;
 
     bool framebufferResized = false;
@@ -351,30 +349,14 @@ private:
     }
 
     void createSurface() {
-        VkSurfaceKHR _surface;
-
-        // Create Android surface
-        VkAndroidSurfaceCreateInfoKHR createInfo = {
-                .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
+        vk::AndroidSurfaceCreateInfoKHR createInfo{
+                .sType = vk::StructureType::eAndroidSurfaceCreateInfoKHR,
                 .pNext = nullptr,
-                .flags = 0,
-                .window = window.get()
+                .flags = vk::AndroidSurfaceCreateFlagsKHR(),
+                .window = window
         };
 
-        VkResult result = vkCreateAndroidSurfaceKHR(
-                *instance,
-                &createInfo,
-                nullptr,
-                &_surface
-        );
-
-        if (result != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create Android surface");
-        }
-
-        LOG_INFO("Android surface created");
-
-        surface = vk::raii::SurfaceKHR(instance, _surface);
+        surface = vk::raii::SurfaceKHR(instance, createInfo);
     }
 
     // Pick physical device
@@ -517,7 +499,8 @@ private:
         SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
         swapChainExtent = chooseSwapExtent(swapChainSupport.capabilities);
         swapChainSurfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-        vk::SwapchainCreateInfoKHR swapChainCreateInfo{.surface          = *surface,
+        vk::SwapchainCreateInfoKHR swapChainCreateInfo{
+                .surface          = *surface,
                 .minImageCount    = chooseSwapMinImageCount(swapChainSupport.capabilities),
                 .imageFormat      = swapChainSurfaceFormat.format,
                 .imageColorSpace  = swapChainSurfaceFormat.colorSpace,
@@ -559,7 +542,7 @@ private:
                     }
             };
 
-            swapChainImageViews.push_back(device.createImageView(createInfo));
+            swapChainImageViews.emplace_back(device.createImageView(createInfo));
         }
     }
 
@@ -645,43 +628,6 @@ private:
 
     // Create graphics pipeline
     void createGraphicsPipeline() {
-        // Load shader code from asset files
-//        LOGI("Loading shaders from assets");
-//
-//        std::optional<AAssetManager *> optionalAssetManager = assetManager;
-//
-//        std::vector<char> vertShaderCode = readFile("shaders/vert.spv", optionalAssetManager);
-//        std::vector<char> fragShaderCode = readFile("shaders/frag.spv", optionalAssetManager);
-//
-//        LOGI("Shaders loaded successfully");
-//
-//        // Create shader modules
-//        vk::ShaderModuleCreateInfo vertShaderModuleInfo{
-//                .codeSize = vertShaderCode.size(),
-//                .pCode = reinterpret_cast<const uint32_t *>(vertShaderCode.data())
-//        };
-//        vk::raii::ShaderModule vertShaderModule = device.createShaderModule(vertShaderModuleInfo);
-//
-//        vk::ShaderModuleCreateInfo fragShaderModuleInfo{
-//                .codeSize = fragShaderCode.size(),
-//                .pCode = reinterpret_cast<const uint32_t *>(fragShaderCode.data())
-//        };
-//        vk::raii::ShaderModule fragShaderModule = device.createShaderModule(fragShaderModuleInfo);
-//
-//        // Create shader stages
-//        vk::PipelineShaderStageCreateInfo shaderStages[] = {
-//                {
-//                        .stage = vk::ShaderStageFlagBits::eVertex,
-//                        .module = *vertShaderModule,
-//                        .pName = "main"
-//                },
-//                {
-//                        .stage = vk::ShaderStageFlagBits::eFragment,
-//                        .module = *fragShaderModule,
-//                        .pName = "main"
-//                }
-//        };
-
         LOGI("Loading shaders from assets");
 
         auto shaderModule = createShaderModule(readFile("shaders/tex.spv", assetManager));
@@ -793,11 +739,12 @@ private:
 
     // Create framebuffers
     void createFramebuffers() {
+        assert(swapChainFramebuffers.empty());
         swapChainFramebuffers.reserve(swapChainImageViews.size());
 
-        for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+        for (const auto &swapChainImageView: swapChainImageViews) {
             vk::ImageView attachments[] = {
-                    *swapChainImageViews[i]
+                    *swapChainImageView
             };
 
             vk::FramebufferCreateInfo framebufferInfo{
@@ -809,7 +756,7 @@ private:
                     .layers = 1
             };
 
-            swapChainFramebuffers.push_back(device.createFramebuffer(framebufferInfo));
+            swapChainFramebuffers.emplace_back(device.createFramebuffer(framebufferInfo));
         }
     }
 
@@ -1096,6 +1043,7 @@ private:
         }
 
         swapChainImageViews.clear();
+        swapChainFramebuffers.clear();
         swapChain = nullptr;
     }
 
@@ -1218,8 +1166,8 @@ private:
         if (capabilities.currentExtent.width != 0xFFFFFFFF) {
             return capabilities.currentExtent;
         } else {
-            int32_t width = ANativeWindow_getWidth(window.get());
-            int32_t height = ANativeWindow_getHeight(window.get());
+            int32_t width = ANativeWindow_getWidth(window);
+            int32_t height = ANativeWindow_getHeight(window);
 
             vk::Extent2D actualExtent = {
                     static_cast<uint32_t>(width),
