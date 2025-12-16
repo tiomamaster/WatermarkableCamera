@@ -10,6 +10,8 @@ file(
         EXPECTED_HASH SHA256=2020b4fc42dba44817983e06342e682ecfc3d2f484a581f11cc5731fbe4dce8a)
 include(${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM.cmake)
 
+include(AndroidNdkModules)
+
 # Include the GameActivity static lib to the project.
 find_package(game-activity REQUIRED CONFIG)
 set(CMAKE_SHARED_LINKER_FLAGS
@@ -50,15 +52,18 @@ function(add_slang_shader_target TARGET)
     add_custom_target(${TARGET} DEPENDS ${SHADERS_OUT_DIR}/tex.spv)
 endfunction()
 
-add_library(${PROJECT_NAME} SHARED main.cpp)
+add_library(${PROJECT_NAME} SHARED main.cpp camera_utils.cpp)
 
 # add lib dependencies
 target_link_libraries(${PROJECT_NAME} PUBLIC
-        vulkan
-        VulkanHpp::VulkanHpp
         game-activity::game-activity_static
         android
         log
+        m
+        camera2ndk
+        mediandk
+        vulkan
+        VulkanHpp::VulkanHpp
         glm)
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/_deps/stb-src)
 add_slang_shader_target(main_slang_shader SOURCES
