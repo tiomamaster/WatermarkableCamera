@@ -4,7 +4,6 @@
 #include <media/NdkImage.h>
 
 #include <cinttypes>
-#include <string>
 #include <typeinfo>
 #include <utility>
 #include <vector>
@@ -281,10 +280,20 @@ void PrintMetadataTags(int32_t entries, const uint32_t* pTags) {
 }
 
 void PrintLensFacing(ACameraMetadata_const_entry& lens) {
-    ASSERT(lens.tag == ACAMERA_LENS_FACING, "Wrong tag(%#x) of %s to %s",
-           lens.tag, GetTagStr((acamera_metadata_tag_t)lens.tag), __FUNCTION__);
-    LOGI("LensFacing: tag(%#x), type(%d), count(%d), val(%#x)", lens.tag,
-         lens.type, lens.count, lens.data.u8[0]);
+    ASSERT(
+        lens.tag == ACAMERA_LENS_FACING,
+        "Wrong tag(%#x) of %s to %s",
+        lens.tag,
+        GetTagStr((acamera_metadata_tag_t)lens.tag),
+        __FUNCTION__
+    );
+    LOGI(
+        "LensFacing: tag(%#x), type(%d), count(%d), val(%#x)",
+        lens.tag,
+        lens.type,
+        lens.count,
+        lens.data.u8[0]
+    );
 }
 
 /*
@@ -296,16 +305,25 @@ void PrintStreamConfigurations(ACameraMetadata_const_entry& val) {
 #define MODE_LABLE "ModeInfo:"
     const char* tagName =
         GetTagStr(static_cast<acamera_metadata_tag_t>(val.tag));
-    ASSERT(!(val.count & 0x3), "STREAM_CONFIGURATION (%d) should multiple of 4",
-           val.count);
-    ASSERT(val.type == ACAMERA_TYPE_INT32,
-           "STREAM_CONFIGURATION TYPE(%d) is not ACAMERA_TYPE_INT32(1)",
-           val.type);
+    ASSERT(
+        !(val.count & 0x3),
+        "STREAM_CONFIGURATION (%d) should multiple of 4",
+        val.count
+    );
+    ASSERT(
+        val.type == ACAMERA_TYPE_INT32,
+        "STREAM_CONFIGURATION TYPE(%d) is not ACAMERA_TYPE_INT32(1)",
+        val.type
+    );
     LOGI("%s -- %s:", tagName, MODE_LABLE);
     for (uint32_t i = 0; i < val.count; i += 4) {
-        LOGI("%s: %08d x %08d  %s", GetFormatStr(val.data.i32[i]),
-             val.data.i32[i + 1], val.data.i32[i + 2],
-             val.data.i32[i + 3] ? "INPUT" : "OUTPUT");
+        LOGI(
+            "%s: %08d x %08d  %s",
+            GetFormatStr(val.data.i32[i]),
+            val.data.i32[i + 1],
+            val.data.i32[i + 2],
+            val.data.i32[i + 3] ? "INPUT" : "OUTPUT"
+        );
     }
 #undef MODE_LABLE
 }
@@ -324,8 +342,12 @@ void PrintTagVal(const char* printLabel, ACameraMetadata_const_entry& val) {
                 LOGI("%s %s: %#02x", printLabel, name, val.data.u8[i]);
                 break;
             case ACAMERA_TYPE_INT64:
-                LOGI("%s %s: %" PRIu64, printLabel, name,
-                     (int64_t)val.data.i64[i]);
+                LOGI(
+                    "%s %s: %" PRIu64,
+                    printLabel,
+                    name,
+                    (int64_t)val.data.i64[i]
+                );
                 break;
             case ACAMERA_TYPE_FLOAT:
                 LOGI("%s %s: %f", printLabel, name, val.data.f[i]);
@@ -334,8 +356,13 @@ void PrintTagVal(const char* printLabel, ACameraMetadata_const_entry& val) {
                 LOGI("%s %s: %" PRIx64, printLabel, name, val.data.i64[i]);
                 break;
             case ACAMERA_TYPE_RATIONAL:
-                LOGI("%s %s: %08x, %08x", printLabel, name,
-                     val.data.r[i].numerator, val.data.r[i].denominator);
+                LOGI(
+                    "%s %s: %08x, %08x",
+                    printLabel,
+                    name,
+                    val.data.r[i].numerator,
+                    val.data.r[i].denominator
+                );
                 break;
             default:
                 ASSERT(false, "Unknown tag value type: %d", val.type);
@@ -369,9 +396,10 @@ void PrintCameras(ACameraManager* cmrMgr) {
             camera_status_t status =
                 ACameraMetadata_getConstEntry(metadataObj, tags[tagIdx], &val);
             if (status != ACAMERA_OK) {
-                LOGW("Unsupported Tag: %s",
-                     GetTagStr(
-                         static_cast<acamera_metadata_tag_t>(tags[tagIdx])));
+                LOGW(
+                    "Unsupported Tag: %s",
+                    GetTagStr(static_cast<acamera_metadata_tag_t>(tags[tagIdx]))
+                );
                 continue;
             }
 
@@ -407,8 +435,11 @@ void PrintRequestMetadata(ACaptureRequest* req) {
                     LOGI("Capture Tag %s: %#08x", name, val.data.u8[i]);
                     break;
                 case ACAMERA_TYPE_INT64:
-                    LOGI("Capture Tag %s: %" PRIu64, name,
-                         (int64_t)val.data.i64[i]);
+                    LOGI(
+                        "Capture Tag %s: %" PRIu64,
+                        name,
+                        (int64_t)val.data.i64[i]
+                    );
                     break;
                 case ACAMERA_TYPE_FLOAT:
                     LOGI("Capture Tag %s: %f", name, val.data.f[i]);
@@ -417,8 +448,12 @@ void PrintRequestMetadata(ACaptureRequest* req) {
                     LOGI("Capture Tag %s: %" PRIx64, name, val.data.i64[i]);
                     break;
                 case ACAMERA_TYPE_RATIONAL:
-                    LOGI("Capture Tag %s: %08x, %08x", name,
-                         val.data.r[i].numerator, val.data.r[i].denominator);
+                    LOGI(
+                        "Capture Tag %s: %08x, %08x",
+                        name,
+                        val.data.r[i].numerator,
+                        val.data.r[i].denominator
+                    );
                     break;
                 default:
                     ASSERT(false, "Unknown tag value type: %d", val.type);
@@ -433,8 +468,10 @@ void PrintRequestMetadata(ACaptureRequest* req) {
  */
 using DEV_ERROR_PAIR = std::pair<int, const char*>;
 static std::vector<DEV_ERROR_PAIR> devErrors{
-    MAKE_PAIR(ERROR_CAMERA_IN_USE),   MAKE_PAIR(ERROR_MAX_CAMERAS_IN_USE),
-    MAKE_PAIR(ERROR_CAMERA_DISABLED), MAKE_PAIR(ERROR_CAMERA_DEVICE),
+    MAKE_PAIR(ERROR_CAMERA_IN_USE),
+    MAKE_PAIR(ERROR_MAX_CAMERAS_IN_USE),
+    MAKE_PAIR(ERROR_CAMERA_DISABLED),
+    MAKE_PAIR(ERROR_CAMERA_DEVICE),
     MAKE_PAIR(ERROR_CAMERA_SERVICE),
 };
 

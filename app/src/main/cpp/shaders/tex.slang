@@ -12,6 +12,7 @@ struct UniformBuffer {
 ConstantBuffer<UniformBuffer> ubo;
 
 Sampler2D texture;
+Sampler2D camTexture;
 
 struct VSOutput {
     float4 pos : SV_Position;
@@ -30,5 +31,5 @@ VSOutput vertMain(VSInput input) {
 
 [shader("fragment")]
 float4 fragMain(VSOutput vertIn) : SV_Target {
-    return texture.Sample(vertIn.fragTexCoord);
+    return camTexture.Sample(vertIn.fragTexCoord);
 }
