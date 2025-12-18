@@ -43,7 +43,7 @@
 
 constexpr uint64_t FenceTimeout = 100000000;
 const std::string TEXTURE_PATH = "textures/texture.jpg";
-constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+constexpr int MAX_FRAMES_IN_FLIGHT = 1;
 
 // Define VpProfileProperties structure if not already defined
 #ifndef VP_PROFILE_PROPERTIES_DEFINED
@@ -140,6 +140,7 @@ class VulkanApplication {
         pickPhysicalDevice();
         checkFeatureSupport();
         createLogicalDevice();
+        createTextureSamplers();
         createSwapChain();
         createImageViews();
         createRenderPass();
@@ -149,7 +150,6 @@ class VulkanApplication {
         createCommandPool();
         createTextureImage();
         createTextureImageView();
-        createTextureSampler();
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();
@@ -159,6 +159,118 @@ class VulkanApplication {
         createSyncObjects();
 
         initialized = true;
+    }
+
+    void hwBufferToTexture(AHardwareBuffer* hwBuffer) {
+//        if (*camTextureImage) return;
+//        LOGI("Create new cam texture");
+
+//        device.waitIdle();
+
+        auto hwBufProps = device.getAndroidHardwareBufferPropertiesANDROID<
+            vk::AndroidHardwareBufferPropertiesANDROID,
+            vk::AndroidHardwareBufferFormatPropertiesANDROID>(*hwBuffer);
+        vk::ExternalFormatANDROID extFormatAndroid{
+            .externalFormat =
+                hwBufProps
+                    .get<vk::AndroidHardwareBufferFormatPropertiesANDROID>()
+                    .externalFormat};
+
+        vk::ExternalMemoryImageCreateInfo externalMemoryImageCreateInfo{
+            .pNext = &extFormatAndroid,
+            .handleTypes = vk::ExternalMemoryHandleTypeFlagBits::
+                eAndroidHardwareBufferANDROID};
+
+        AHardwareBuffer_Desc hardwareBufferDesc;
+        AHardwareBuffer_describe(hwBuffer, &hardwareBufferDesc);
+
+        vk::ImageCreateInfo imageInfo{
+            .pNext = &externalMemoryImageCreateInfo,
+            .imageType = vk::ImageType::e2D,
+            .format =
+                hwBufProps
+                    .get<vk::AndroidHardwareBufferFormatPropertiesANDROID>()
+                    .format,
+            .extent = {static_cast<uint32_t>(hardwareBufferDesc.width),
+                       static_cast<uint32_t>(hardwareBufferDesc.height), 1},
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = vk::SampleCountFlagBits::e1,
+            .tiling = vk::ImageTiling::eOptimal,
+            .usage = vk::ImageUsageFlagBits::eSampled,
+            .sharingMode = vk::SharingMode::eExclusive,
+            .initialLayout = vk::ImageLayout::eUndefined};
+
+        camTextureImage = device.createImage(imageInfo);
+
+        vk::ImportAndroidHardwareBufferInfoANDROID importBufferInfo{
+            .buffer = hwBuffer};
+        vk::MemoryDedicatedAllocateInfo dedicatedAllocateInfo{
+            .pNext = &importBufferInfo, .image = *camTextureImage};
+        vk::MemoryAllocateInfo allocInfo{
+            .pNext = &dedicatedAllocateInfo,
+            .allocationSize =
+                hwBufProps.get<vk::AndroidHardwareBufferPropertiesANDROID>()
+                    .allocationSize,
+            .memoryTypeIndex = findMemoryType(
+                hwBufProps.get<vk::AndroidHardwareBufferPropertiesANDROID>()
+                    .memoryTypeBits,
+                vk::MemoryPropertyFlagBits::eDeviceLocal)};
+
+        vk::raii::DeviceMemory bufferMemory = device.allocateMemory(allocInfo);
+
+        vk::BindImageMemoryInfo bindInfo{.image = *camTextureImage,
+                                         .memory = *bufferMemory,
+                                         .memoryOffset = 0};
+
+        device.bindImageMemory2(bindInfo);
+
+        vk::SamplerYcbcrConversionInfo samplerYcbcrConversionInfo{
+            .conversion = *camTexConversion};
+
+        vk::ImageViewCreateInfo viewInfo{
+            .pNext = &samplerYcbcrConversionInfo,
+            .image = *camTextureImage,
+            .viewType = vk::ImageViewType::e2D,
+            .format =
+                hwBufProps
+                    .get<vk::AndroidHardwareBufferFormatPropertiesANDROID>()
+                    .format,
+            //            .components = {.r = vk::ComponentSwizzle::eR,
+            //                           .g = vk::ComponentSwizzle::eG,
+            //                           .b = vk::ComponentSwizzle::eB,
+            //                           .a = vk::ComponentSwizzle::eA},
+            .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor,
+                                 .baseMipLevel = 0,
+                                 .levelCount = 1,
+                                 .baseArrayLayer = 0,
+                                 .layerCount = 1}};
+
+        camTextureImageView = device.createImageView(viewInfo);
+
+        //        device.waitIdle();
+
+        transitionImageLayout(camTextureImage, vk::ImageLayout::eUndefined,
+                              vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            vk::DescriptorImageInfo descriptorImageInfo{
+                .sampler = *camTextureSampler,
+                .imageView = *camTextureImageView,
+                .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
+
+            vk::WriteDescriptorSet descriptorWrites{
+                .dstSet = *descriptorSets[i],
+                .dstBinding = 2,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                .pImageInfo = &descriptorImageInfo};
+
+            device.updateDescriptorSets(descriptorWrites, nullptr);
+        }
+
+        drawFrame();
     }
 
     // Draw frame
@@ -287,10 +399,16 @@ class VulkanApplication {
     vk::raii::DeviceMemory vertexBufferMemory = nullptr;
     vk::raii::Buffer indexBuffer = nullptr;
     vk::raii::DeviceMemory indexBufferMemory = nullptr;
+
     vk::raii::Image textureImage = nullptr;
     vk::raii::DeviceMemory textureImageMemory = nullptr;
     vk::raii::ImageView textureImageView = nullptr;
     vk::raii::Sampler textureSampler = nullptr;
+    vk::raii::Image camTextureImage = nullptr;
+    vk::raii::ImageView camTextureImageView = nullptr;
+    vk::raii::SamplerYcbcrConversion camTexConversion = nullptr;
+    vk::raii::Sampler camTextureSampler = nullptr;
+
     std::vector<vk::raii::Buffer> uniformBuffers;
     std::vector<vk::raii::DeviceMemory> uniformBuffersMemory;
     vk::raii::DescriptorPool descriptorPool = nullptr;
@@ -322,7 +440,10 @@ class VulkanApplication {
 
     // Required device extensions
     const std::vector<const char*> deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+        vk::KHRSwapchainExtensionName,
+        vk::ANDROIDExternalMemoryAndroidHardwareBufferExtensionName,
+        vk::EXTQueueFamilyForeignExtensionName,
+        /*vk::EXTDescriptorIndexingExtensionName*/};
 
     // Create Vulkan instance
     void createInstance() {
@@ -337,13 +458,13 @@ class VulkanApplication {
         // Get required extensions
         std::vector<const char*> extensions = getRequiredExtensions();
 
-//        const std::vector validationLayers = {"VK_LAYER_KHRONOS_validation"};
+        const std::vector validationLayers = {"VK_LAYER_KHRONOS_validation"};
 
         // Create instance
         vk::InstanceCreateInfo createInfo{
             .pApplicationInfo = &appInfo,
-//            .enabledLayerCount = 1,
-//            .ppEnabledLayerNames = validationLayers.data(),
+            .enabledLayerCount = 1,
+            .ppEnabledLayerNames = validationLayers.data(),
             .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
             .ppEnabledExtensionNames = extensions.data()};
 
@@ -494,11 +615,14 @@ class VulkanApplication {
             device = vk::raii::Device(physicalDevice, vkDeviceCreateInfo);
         } else {
             // Fallback to manual device creation
+            vk::PhysicalDeviceVulkan11Features vk11features{
+                .samplerYcbcrConversion = vk::True};
             vk::PhysicalDeviceFeatures deviceFeatures{};
             deviceFeatures.samplerAnisotropy = vk::True;
             deviceFeatures.sampleRateShading = vk::True;
 
             vk::DeviceCreateInfo createInfo{
+                .pNext = &vk11features,
                 .queueCreateInfoCount = 1,
                 .pQueueCreateInfos = &deviceQueueCreateInfo,
                 .enabledExtensionCount =
@@ -586,7 +710,7 @@ class VulkanApplication {
             .pColorAttachments = &colorAttachmentRef};
 
         vk::SubpassDependency dependency{
-            .srcSubpass = VK_SUBPASS_EXTERNAL,
+            .srcSubpass = vk::SubpassExternal,
             .dstSubpass = 0,
             .srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
             .dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
@@ -618,10 +742,23 @@ class VulkanApplication {
             .descriptorCount = 1,
             .stageFlags = vk::ShaderStageFlagBits::eFragment};
 
-        std::array<vk::DescriptorSetLayoutBinding, 2> bindings = {
-            uboLayoutBinding, samplerLayoutBinding};
+        const vk::Sampler samplers[] = {*camTextureSampler};
+        vk::DescriptorSetLayoutBinding camSamplerLayoutBinding{
+            .binding = 2,
+            .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+            .descriptorCount = 1,
+            .stageFlags = vk::ShaderStageFlagBits::eFragment,
+            .pImmutableSamplers = samplers};
 
+        std::array bindings = {uboLayoutBinding, samplerLayoutBinding,
+                               camSamplerLayoutBinding};
+
+        vk::DescriptorBindingFlags flags{
+            vk::DescriptorBindingFlagBits::eUpdateAfterBind};
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo f{.pBindingFlags =
+                                                            &flags};
         vk::DescriptorSetLayoutCreateInfo layoutInfo{
+            .pNext = &f,
             .bindingCount = static_cast<uint32_t>(bindings.size()),
             .pBindings = bindings.data()};
 
@@ -845,13 +982,12 @@ class VulkanApplication {
 
         // Transition image layout and copy buffer to image
         // todo: see how in desktop tutor
-        transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Unorm,
-                              vk::ImageLayout::eUndefined,
+        transitionImageLayout(textureImage, vk::ImageLayout::eUndefined,
                               vk::ImageLayout::eTransferDstOptimal);
         copyBufferToImage(stagingBuffer, textureImage,
                           static_cast<uint32_t>(texWidth),
                           static_cast<uint32_t>(texHeight));
-        transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Unorm,
+        transitionImageLayout(textureImage,
                               vk::ImageLayout::eTransferDstOptimal,
                               vk::ImageLayout::eShaderReadOnlyOptimal);
     }
@@ -863,7 +999,7 @@ class VulkanApplication {
     }
 
     // Create texture sampler
-    void createTextureSampler() {
+    void createTextureSamplers() {
         vk::PhysicalDeviceProperties properties =
             physicalDevice.getProperties();
         vk::SamplerCreateInfo samplerInfo{
@@ -884,6 +1020,36 @@ class VulkanApplication {
             .unnormalizedCoordinates = vk::False};
 
         textureSampler = device.createSampler(samplerInfo);
+
+        // todo: create with correct format
+        vk::ExternalFormatANDROID extFormatAndroid{.externalFormat = 647};
+
+        vk::SamplerYcbcrConversionCreateInfo samplerYcbcrConversionCreateInfo{
+            .pNext = &extFormatAndroid,
+            .format = vk::Format::eUndefined,
+            .ycbcrModel = vk::SamplerYcbcrModelConversion::eYcbcr709,
+            .ycbcrRange = vk::SamplerYcbcrRange::eItuFull,
+//            .components = {vk::ComponentSwizzle::eB,
+//                           vk::ComponentSwizzle::eIdentity,
+//                           vk::ComponentSwizzle::eR,
+//                           vk::ComponentSwizzle::eIdentity},
+            .xChromaOffset = vk::ChromaLocation::eCositedEven,
+            .yChromaOffset = vk::ChromaLocation::eCositedEven,
+            .chromaFilter = vk::Filter::eLinear,
+            .forceExplicitReconstruction = vk::False};
+
+        camTexConversion = device.createSamplerYcbcrConversion(
+            samplerYcbcrConversionCreateInfo);
+
+        vk::SamplerYcbcrConversionInfo samplerYcbcrConversionInfo{
+            .conversion = *camTexConversion};
+        samplerInfo.pNext = &samplerYcbcrConversionInfo;
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        samplerInfo.anisotropyEnable = vk::False;
+
+        camTextureSampler = device.createSampler(samplerInfo);
     }
 
     // Create vertex buffer
@@ -958,9 +1124,12 @@ class VulkanApplication {
 
     // Create descriptor pool
     void createDescriptorPool() {
-        std::array<vk::DescriptorPoolSize, 2> poolSizes = {
+        std::array poolSizes = {
             vk::DescriptorPoolSize{
                 .type = vk::DescriptorType::eUniformBuffer,
+                .descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT)},
+            vk::DescriptorPoolSize{
+                .type = vk::DescriptorType::eCombinedImageSampler,
                 .descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT)},
             vk::DescriptorPoolSize{
                 .type = vk::DescriptorType::eCombinedImageSampler,
@@ -968,10 +1137,7 @@ class VulkanApplication {
                     static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT)}};
 
         vk::DescriptorPoolCreateInfo poolInfo{
-            //                .flags =
-            //                vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-            //                //
-            //                desktop flag
+            /*.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind,*/
             .maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
             .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
             .pPoolSizes = poolSizes.data()};
@@ -1306,7 +1472,7 @@ class VulkanApplication {
     }
 
     // Transition image layout
-    void transitionImageLayout(vk::raii::Image& image, vk::Format format,
+    void transitionImageLayout(vk::raii::Image& image,
                                vk::ImageLayout oldLayout,
                                vk::ImageLayout newLayout) {
         vk::CommandBufferAllocateInfo allocInfo{
@@ -1324,8 +1490,8 @@ class VulkanApplication {
         vk::ImageMemoryBarrier barrier{
             .oldLayout = oldLayout,
             .newLayout = newLayout,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
+            .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
             .image = *image,
             .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor,
                                  .baseMipLevel = 0,
@@ -1349,6 +1515,13 @@ class VulkanApplication {
             barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
             sourceStage = vk::PipelineStageFlagBits::eTransfer;
+            destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+        } else if (oldLayout == vk::ImageLayout::eUndefined &&
+                   newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+            barrier.srcAccessMask = vk::AccessFlagBits::eNone;
+            barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+            sourceStage = vk::PipelineStageFlagBits::eHost;
             destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
         } else {
             throw std::invalid_argument("Unsupported layout transition");

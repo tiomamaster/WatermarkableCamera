@@ -1,10 +1,12 @@
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 
+#include "camera_engine.hpp"
 #include "hellovk.hpp"
 
 struct AppState {
     android_app* androidApp = nullptr;
     VulkanApplication* vkApp = nullptr;
+    CameraEngine* camEngine = nullptr;
     bool canRender = false;
 };
 
@@ -29,6 +31,13 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
             // The window is being shown, get it ready.
             LOGI("Called - APP_CMD_INIT_WINDOW");
             if (appState->androidApp->window != nullptr) {
+                LOGI("Init camera engine");
+                appState->camEngine->SaveNativeWinRes(
+                    ANativeWindow_getWidth(app->window),
+                    ANativeWindow_getHeight(app->window),
+                    ANativeWindow_getFormat(app->window));
+                appState->camEngine->OnAppInitWindow();
+
                 LOGI("Setting a new surface");
                 appState->vkApp->reset(app->window,
                                        app->activity->assetManager);
@@ -40,6 +49,7 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
             }
             break;
         case APP_CMD_TERM_WINDOW:
+            // todo: terminate camera
             // The window is being hidden or closed, clean it up.
             LOGI("Called - APP_CMD_TERM_WINDOW");
             appState->canRender = false;
@@ -57,14 +67,19 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
 [[maybe_unused]] void android_main(struct android_app* app) {
     AppState appState{};
     VulkanApplication vkApp{};
+    CameraEngine camEngine(app);
 
     appState.androidApp = app;
     appState.vkApp = &vkApp;
+    appState.camEngine = &camEngine;
     app->userData = &appState;
     app->onAppCmd = handleAppCommand;
 
     int events;
     android_poll_source* source;
+
+    AImage* prevImage = nullptr;
+    AHardwareBuffer* prevBuff = nullptr;
 
     while (app->destroyRequested == 0) {
         while (ALooper_pollOnce(appState.canRender ? 0 : -1, nullptr, &events,
@@ -74,6 +89,49 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
             }
         }
 
-        appState.vkApp->drawFrame();
-    }
+//        if (!prevImage) {
+            auto image = appState.camEngine->getNextImage();
+            if (image) {
+                LOGI("Next image acquired");
+
+                AHardwareBuffer* hwBuffer;
+                media_status_t status =
+                    AImage_getHardwareBuffer(image, &hwBuffer);
+
+                if (status == AMEDIA_OK) {
+                    AHardwareBuffer_acquire(hwBuffer);
+                    LOGI("Buffer %p acquired by vk renderer", hwBuffer);
+
+                    appState.vkApp->hwBufferToTexture(hwBuffer);
+
+                    //                AHardwareBuffer_release(hwBuffer);
+
+                    //                if (prevBuff) {
+                    //                    LOGI("Releasing old hw buffer");
+                    //                    AHardwareBuffer_release(prevBuff);
+                    //                }
+
+                    prevBuff = hwBuffer;
+
+                } else {
+                    LOGI("Can't acquire hw buffer");
+                }
+
+                if (prevImage) {
+                    LOGI("Releasing old image");
+                    AImage_delete(prevImage);
+                }
+
+                prevImage = image;
+
+                //            AImage_delete(image);
+
+                //            appState.vkApp->drawFrame();
+            } else {
+                //            LOGI("camEngine returned null next image");
+            }
+        }
+
+        //        appState.vkApp->drawFrame();
+//    }
 }

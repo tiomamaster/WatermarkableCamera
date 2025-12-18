@@ -52,7 +52,15 @@ function(add_slang_shader_target TARGET)
     add_custom_target(${TARGET} DEPENDS ${SHADERS_OUT_DIR}/tex.spv)
 endfunction()
 
-add_library(${PROJECT_NAME} SHARED main.cpp camera_utils.cpp)
+add_library(${PROJECT_NAME} SHARED
+#        camera_main.cpp
+        main.cpp
+        camera_utils.cpp
+        image_reader.cpp
+        camera_engine.cpp
+        camera_manager.cpp
+        camera_listeners.cpp
+)
 
 # add lib dependencies
 target_link_libraries(${PROJECT_NAME} PUBLIC

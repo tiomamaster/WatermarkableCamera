@@ -34,4 +34,5 @@ void PrintCameras(ACameraManager* cameraMgr);
 void PrintCameraDeviceError(int err);
 
 void PrintRequestMetadata(ACaptureRequest* req);
+
 #endif  // CAMERA_UTILS_HPP
