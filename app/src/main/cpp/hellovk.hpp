@@ -107,7 +107,7 @@ struct UniformBufferObject {
 };
 
 // Cross-platform file reading function
-std::vector<char> readFile(
+static std::vector<char> readFile(
     const std::string& filename, AAssetManager* assetManager
 ) {
     // Open the asset
