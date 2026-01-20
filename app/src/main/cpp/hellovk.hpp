@@ -38,7 +38,7 @@
 
 constexpr uint64_t FenceTimeout = 100000000;
 const std::string TEXTURE_PATH = "textures/texture.jpg";
-constexpr int MAX_FRAMES_IN_FLIGHT = 1;
+constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
 // Define VpProfileProperties structure if not already defined
 #ifndef VP_PROFILE_PROPERTIES_DEFINED
@@ -202,6 +202,13 @@ class VulkanApplication {
             renderPassInfo, vk::SubpassContents::eInline
         );
 
+        if (camTextures.size() == 0) {
+            LOGI("Resize camTextures");
+            camTextures.resize(MAX_FRAMES_IN_FLIGHT);
+        }
+
+        CamTexture& camTexture = camTextures[currentFrame];
+
         auto hwBufProps = device.getAndroidHardwareBufferPropertiesANDROID<
             vk::AndroidHardwareBufferPropertiesANDROID,
             vk::AndroidHardwareBufferFormatPropertiesANDROID>(*hwBuffer);
@@ -241,13 +248,13 @@ class VulkanApplication {
             .initialLayout = vk::ImageLayout::eUndefined
         };
 
-        camTextureImage = device.createImage(imageInfo);
+        camTexture.image = device.createImage(imageInfo);
 
         vk::ImportAndroidHardwareBufferInfoANDROID importBufferInfo{
             .buffer = hwBuffer
         };
         vk::MemoryDedicatedAllocateInfo dedicatedAllocateInfo{
-            .pNext = &importBufferInfo, .image = *camTextureImage
+            .pNext = &importBufferInfo, .image = *camTexture.image
         };
         vk::MemoryAllocateInfo allocInfo{
             .pNext = &dedicatedAllocateInfo,
@@ -261,11 +268,11 @@ class VulkanApplication {
             )
         };
 
-        camTextureMemory = device.allocateMemory(allocInfo);
+        camTexture.memory = device.allocateMemory(allocInfo);
 
         vk::BindImageMemoryInfo bindInfo{
-            .image = *camTextureImage,
-            .memory = *camTextureMemory,
+            .image = *camTexture.image,
+            .memory = *camTexture.memory,
             .memoryOffset = 0
         };
 
@@ -277,7 +284,7 @@ class VulkanApplication {
 
         vk::ImageViewCreateInfo viewInfo{
             .pNext = &samplerYcbcrConversionInfo,
-            .image = *camTextureImage,
+            .image = *camTexture.image,
             .viewType = vk::ImageViewType::e2D,
             .format =
                 hwBufProps
@@ -300,32 +307,30 @@ class VulkanApplication {
             }
         };
 
-        camTextureImageView = device.createImageView(viewInfo);
+        camTexture.imageView = device.createImageView(viewInfo);
 
         transitionImageLayout(
-            camTextureImage,
+            camTexture.image,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eShaderReadOnlyOptimal
         );
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            vk::DescriptorImageInfo descriptorImageInfo{
-                .sampler = *camTextureSampler,
-                .imageView = *camTextureImageView,
-                .imageLayout = vk::ImageLayout::eGeneral
-            };
+        vk::DescriptorImageInfo descriptorImageInfo{
+            .sampler = *camTextureSampler,
+            .imageView = *camTexture.imageView,
+            .imageLayout = vk::ImageLayout::eGeneral
+        };
 
-            vk::WriteDescriptorSet descriptorWrites{
-                .dstSet = *descriptorSets[i],
-                .dstBinding = 2,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                .pImageInfo = &descriptorImageInfo
-            };
+        vk::WriteDescriptorSet descriptorWrites{
+            .dstSet = *descriptorSets[currentFrame],
+            .dstBinding = 2,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+            .pImageInfo = &descriptorImageInfo
+        };
 
-            device.updateDescriptorSets(descriptorWrites, nullptr);
-        }
+        device.updateDescriptorSets(descriptorWrites, nullptr);
 
         commandBuffers[currentFrame].bindPipeline(
             vk::PipelineBindPoint::eGraphics, *graphicsPipeline
@@ -542,9 +547,12 @@ class VulkanApplication {
     vk::raii::ImageView textureImageView = nullptr;
     vk::raii::Sampler textureSampler = nullptr;
 
-    vk::raii::Image camTextureImage = nullptr;
-    vk::raii::DeviceMemory camTextureMemory = nullptr;
-    vk::raii::ImageView camTextureImageView = nullptr;
+    struct CamTexture {
+        vk::raii::Image image = nullptr;
+        vk::raii::DeviceMemory memory = nullptr;
+        vk::raii::ImageView imageView = nullptr;
+    };
+    std::vector<CamTexture> camTextures;
     vk::raii::SamplerYcbcrConversion camTexConversion = nullptr;
     vk::raii::Sampler camTextureSampler = nullptr;
 
