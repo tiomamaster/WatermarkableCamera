@@ -18,6 +18,10 @@
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_profiles.hpp>
 #include <vulkan/vulkan_raii.hpp>
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/vector_float3.hpp"
+#include "glm/trigonometric.hpp"
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_android.h>
 #include <vulkan/vulkan_core.h>
@@ -101,7 +105,8 @@ struct Vertex {
 };
 
 struct UniformBufferObject {
-    alignas(16) glm::mat4 model;
+    alignas(16) glm::mat4 camModel;
+    alignas(16) glm::mat4 watModel;
     alignas(16) glm::mat4 view;
     alignas(16) glm::mat4 proj;
 };
@@ -571,13 +576,20 @@ class VulkanApplication {
 
     // Model data
     const std::vector<Vertex> vertices = {
+        // cam vertices
+        {{-1.0f, -1.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+        {{1.0f, -1.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+        {{1.0f, 1.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+        {{-1.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+
+        // texture vertices
         {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
         {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
         {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
         {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
     };
 
-    const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
+    const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
 
     // Swap chain support details
     struct SwapChainSupportDetails {
@@ -791,7 +803,8 @@ class VulkanApplication {
         } else {
             // Fallback to manual device creation
             vk::PhysicalDeviceVulkan11Features vk11features{
-                .samplerYcbcrConversion = vk::True
+                .samplerYcbcrConversion = vk::True,
+                .shaderDrawParameters = vk::True
             };
             vk::PhysicalDeviceFeatures deviceFeatures{};
             deviceFeatures.samplerAnisotropy = vk::True;
@@ -1944,10 +1957,16 @@ class VulkanApplication {
             eyeY = maxEyeY - (time * maxEyeY - i * maxEyeY);
 
         UniformBufferObject ubo{};
-        ubo.model =
-            glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 0.0f, 1.0f));
+        // ubo.camModel = glm::identity<glm::mat4>();
+        ubo.camModel = glm::rotate(
+            glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)
+        );
+        ubo.watModel =
+            glm::translate(glm::mat4(1), glm::vec3(0.0f, 0.0f, 0.0f)) *
+            glm::rotate(glm::mat4(1), angle, glm::vec3(0.0f, 0.0f, 1.0f)) *
+            glm::scale(glm::mat4(1), glm::vec3(0.25f, 0.25f, 0.0f));
         ubo.view = glm::lookAt(
-            glm::vec3(0.0f, eyeY, 2.0f),
+            glm::vec3(0.0f, /*eyeY*/ maxEyeY, 2.0f),
             glm::vec3(0.0f, 0.0f, 0.0f),
             glm::vec3(0.0f, 1.0f, 0.0f)
         );
