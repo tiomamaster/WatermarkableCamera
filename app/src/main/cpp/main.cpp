@@ -1,3 +1,4 @@
+#include <android/hardware_buffer_jni.h>
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 
 #include "camera_engine.hpp"
@@ -9,6 +10,8 @@ struct AppState {
     CameraEngine* camEngine = nullptr;
     bool canRender = false;
 };
+
+VulkanApplication vkApp{};
 
 /**
  * Called by the Android runtime whenever events happen so the
@@ -68,7 +71,6 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
 // Android main entry point required by the Android Glue library
 [[maybe_unused]] void android_main(struct android_app* app) {
     AppState appState{};
-    VulkanApplication vkApp{};
     CameraEngine camEngine(app);
 
     appState.androidApp = app;
@@ -113,4 +115,42 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
         AHardwareBuffer_release(hwBuffer);
         AImage_delete(image);
     }
+}
+
+void test(JNIEnv* env, jobject a, jobject hardwareBufferObj) {
+    LOGI("test called from jvm side");
+    AHardwareBuffer* hwBuffer =
+        AHardwareBuffer_fromHardwareBuffer(env, hardwareBufferObj);
+    LOGI(
+        "AHardwareBuffer from HardwareBuffer success = %s",
+        hwBuffer != nullptr ? "true" : "false"
+    );
+    AHardwareBuffer_acquire(hwBuffer);
+    LOGI("Buffer %p acquired by vk renderer", hwBuffer);
+
+    vkApp.watHwBufferToTexture(hwBuffer);
+
+    AHardwareBuffer_release(hwBuffer);
+}
+
+extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM* _Nonnull vm, void* _Nullable) {
+    JNIEnv* env;
+    if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
+        return JNI_ERR;
+    }
+
+    jclass c = env->FindClass(
+        "com/gmail/tiomamaster/watermarkablecamera/VulkanActivity"
+    );
+    if (c == nullptr) return JNI_ERR;
+
+    static const JNINativeMethod methods[] = {
+        {"test",
+         "(Landroid/hardware/HardwareBuffer;)V",
+         reinterpret_cast<void*>(test)}
+    };
+    int rc = env->RegisterNatives(c, methods, 1);
+    if (rc != JNI_OK) return rc;
+
+    return JNI_VERSION_1_6;
 }
