@@ -5,7 +5,13 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
-import android.hardware.camera2.*
+import android.hardware.camera2.CameraAccessException
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraDevice
+import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CameraMetadata
+import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.os.Build
@@ -15,7 +21,10 @@ import android.os.HandlerThread
 import android.util.Log
 import android.util.Range
 import android.util.Size
-import android.view.*
+import android.view.OrientationEventListener
+import android.view.Surface
+import android.view.View
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatImageView
@@ -26,7 +35,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.google.android.material.button.MaterialButton
 import java.io.File
 import java.lang.Long.signum
-import java.util.*
+import java.util.Collections
+import java.util.Timer
 import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -117,13 +127,14 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     private val videoFilePath: String
         get() {
             val filename = "${System.currentTimeMillis()}.mp4"
-            val dir = getExternalFilesDir(null)
+            val dir = /*getExternalFilesDir(null)*/"/sdcard/DCIM/Camera"
+            return "$dir/$filename"
 
-            return if (dir == null) {
-                filename
-            } else {
-                "${dir.absolutePath}/$filename"
-            }
+//            return if (dir == null) {
+//                filename
+//            } else {
+//                "${dir.absolutePath}/$filename"
+//            }
         }
 
     private val hasPermissions: Boolean
@@ -355,7 +366,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     private fun startTimer() {
         var i = 0
         timer = fixedRateTimer(period = 1000) {
-            watermarkText.text = "${i++}"
+            watermarkText.text = "${++i}"
             // TODO: animate it
             watermarkImage.x = Random.nextDouble(0.0, watermark.width.toDouble()).toFloat()
             watermarkImage.y = Random.nextDouble(0.0, watermark.height.toDouble()).toFloat()

@@ -153,8 +153,8 @@ class VulkanApplication {
         createGraphicsPipeline();
         createFramebuffers();
         createCommandPool();
-        createTextureImage();
-        createTextureImageView();
+        // createTextureImage();
+        // createTextureImageView();
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();
@@ -167,6 +167,8 @@ class VulkanApplication {
     }
 
     void hwBufferToTexture(AHardwareBuffer* hwBuffer) {
+        if (watTextures.size() == 0) return;
+
         while (vk::Result::eTimeout ==
                device.waitForFences(
                    *inFlightFences[currentFrame], vk::True, FenceTimeout
@@ -212,7 +214,7 @@ class VulkanApplication {
             camTextures.resize(MAX_FRAMES_IN_FLIGHT);
         }
 
-        CamTexture& camTexture = camTextures[currentFrame];
+        TextureData& camTexture = camTextures[currentFrame];
 
         auto hwBufProps = device.getAndroidHardwareBufferPropertiesANDROID<
             vk::AndroidHardwareBufferPropertiesANDROID,
@@ -320,7 +322,12 @@ class VulkanApplication {
             vk::ImageLayout::eShaderReadOnlyOptimal
         );
 
-        vk::DescriptorImageInfo descriptorImageInfo{
+        // vk::DescriptorImageInfo watDescriptorImageInfo{
+        //     .sampler = *watTextureSampler,
+        //     .imageView = *watTextures[currentFrame].imageView,
+        //     .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+        // };
+        vk::DescriptorImageInfo camDescriptorImageInfo{
             .sampler = *camTextureSampler,
             .imageView = *camTexture.imageView,
             .imageLayout = vk::ImageLayout::eGeneral
@@ -332,10 +339,29 @@ class VulkanApplication {
             .dstArrayElement = 0,
             .descriptorCount = 1,
             .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-            .pImageInfo = &descriptorImageInfo
+            .pImageInfo = &camDescriptorImageInfo
         };
 
         device.updateDescriptorSets(descriptorWrites, nullptr);
+
+        // if (watTextures.size() > 0) {
+        //     vk::DescriptorImageInfo watDescriptorImageInfo{
+        //         .sampler = *watTextureSampler,
+        //         .imageView = *watTextures[currentFrame].imageView,
+        //         .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+        //     };
+        //
+        //     vk::WriteDescriptorSet watDescriptorWrites{
+        //         .dstSet = *descriptorSets[currentFrame],
+        //         .dstBinding = 1,
+        //         .dstArrayElement = 0,
+        //         .descriptorCount = 1,
+        //         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+        //         .pImageInfo = &watDescriptorImageInfo
+        //     };
+        //
+        //     device.updateDescriptorSets(watDescriptorWrites, nullptr);
+        // }
 
         commandBuffers[currentFrame].bindPipeline(
             vk::PipelineBindPoint::eGraphics, *graphicsPipeline
@@ -367,9 +393,12 @@ class VulkanApplication {
             {*descriptorSets[currentFrame]},
             nullptr
         );
-        commandBuffers[currentFrame].drawIndexed(
-            static_cast<uint32_t>(indices.size()), 1, 0, 0, 0
-        );
+
+        uint32_t indexCount = static_cast<uint32_t>(indices.size() / 2);
+        if (watTextures.size() > 0) {
+            indexCount = static_cast<uint32_t>(indices.size());
+        }
+        commandBuffers[currentFrame].drawIndexed(indexCount, 1, 0, 0, 0);
 
         commandBuffers[currentFrame].endRenderPass();
         commandBuffers[currentFrame].end();
@@ -415,6 +444,273 @@ class VulkanApplication {
 
         semaphoreIndex = (semaphoreIndex + 1) % imageAvailableSemaphores.size();
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
+
+    void watHwBufferToTexture(AHardwareBuffer* hwBuffer) {
+        device.waitIdle();
+        // while (vk::Result::eTimeout ==
+        //        device.waitForFences(
+        //            *inFlightFences[currentFrame], vk::True, FenceTimeout
+        //        ));
+        //
+        // uint32_t imageIndex;
+        // try {
+        //     auto [result, idx] = swapChain.acquireNextImage(
+        //         FenceTimeout, *imageAvailableSemaphores[semaphoreIndex],
+        //         nullptr
+        //     );
+        //     imageIndex = idx;
+        // } catch (vk::OutOfDateKHRError&) {
+        //     recreateSwapChain();
+        //     return;
+        // }
+        //
+        // // Update uniform buffer with current transformation
+        // updateUniformBuffer(currentFrame);
+        //
+        // vk::CommandBufferBeginInfo beginInfo{};
+        // commandBuffers[currentFrame].begin(beginInfo);
+        //
+        // vk::RenderPassBeginInfo renderPassInfo{
+        //     .renderPass = *renderPass,
+        //     .framebuffer = *swapChainFramebuffers[imageIndex],
+        //     .renderArea = {.offset = {0, 0}, .extent = swapChainExtent}
+        // };
+        //
+        // vk::ClearValue clearColor;
+        // clearColor.color.float32 = std::array<float, 4>{1.0f, 0.0f,
+        // 0.0f, 1.0f}; renderPassInfo.clearValueCount = 1;
+        // renderPassInfo.pClearValues = &clearColor;
+        //
+        // commandBuffers[currentFrame].beginRenderPass(
+        //     renderPassInfo, vk::SubpassContents::eInline
+        // );
+
+        if (watTextures.size() == 0) {
+            LOGI("Resize watTextures");
+            // watTextures.resize(MAX_FRAMES_IN_FLIGHT);
+            watTextures.resize(1);
+        }
+
+        TextureData& watTexture = watTextures[0];
+
+        auto hwBufProps = device.getAndroidHardwareBufferPropertiesANDROID<
+            vk::AndroidHardwareBufferPropertiesANDROID,
+            vk::AndroidHardwareBufferFormatPropertiesANDROID>(*hwBuffer);
+        vk::ExternalFormatANDROID extFormatAndroid{
+            .externalFormat =
+                hwBufProps
+                    .get<vk::AndroidHardwareBufferFormatPropertiesANDROID>()
+                    .externalFormat
+        };
+
+        vk::ExternalMemoryImageCreateInfo externalMemoryImageCreateInfo{
+            // .pNext = &extFormatAndroid,
+            .handleTypes = vk::ExternalMemoryHandleTypeFlagBits::
+                eAndroidHardwareBufferANDROID
+        };
+
+        AHardwareBuffer_Desc hardwareBufferDesc;
+        AHardwareBuffer_describe(hwBuffer, &hardwareBufferDesc);
+
+        vk::ImageCreateInfo imageInfo{
+            .pNext = &externalMemoryImageCreateInfo,
+            .imageType = vk::ImageType::e2D,
+            .format = vk::Format::eR8G8B8A8Unorm,
+            // .format =
+            //     hwBufProps
+            //         .get<vk::AndroidHardwareBufferFormatPropertiesANDROID>()
+            //         .format,
+            .extent =
+                {static_cast<uint32_t>(hardwareBufferDesc.width),
+                 static_cast<uint32_t>(hardwareBufferDesc.height),
+                 1},
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = vk::SampleCountFlagBits::e1,
+            .tiling = vk::ImageTiling::eOptimal,
+            .usage = vk::ImageUsageFlagBits::eSampled,
+            .sharingMode = vk::SharingMode::eExclusive,
+            .initialLayout = vk::ImageLayout::eUndefined
+        };
+
+        watTexture.image = device.createImage(imageInfo);
+
+        vk::ImportAndroidHardwareBufferInfoANDROID importBufferInfo{
+            .buffer = hwBuffer
+        };
+        vk::MemoryDedicatedAllocateInfo dedicatedAllocateInfo{
+            .pNext = &importBufferInfo, .image = *watTexture.image
+        };
+        vk::MemoryAllocateInfo allocInfo{
+            .pNext = &dedicatedAllocateInfo,
+            .allocationSize =
+                hwBufProps.get<vk::AndroidHardwareBufferPropertiesANDROID>()
+                    .allocationSize,
+            .memoryTypeIndex = findMemoryType(
+                hwBufProps.get<vk::AndroidHardwareBufferPropertiesANDROID>()
+                    .memoryTypeBits,
+                vk::MemoryPropertyFlagBits::eDeviceLocal
+            )
+        };
+
+        watTexture.memory = device.allocateMemory(allocInfo);
+
+        vk::BindImageMemoryInfo bindInfo{
+            .image = *watTexture.image,
+            .memory = *watTexture.memory,
+            .memoryOffset = 0
+        };
+
+        device.bindImageMemory2(bindInfo);
+
+        vk::ImageViewCreateInfo viewInfo{
+            .image = *watTexture.image,
+            .viewType = vk::ImageViewType::e2D,
+            .format = vk::Format::eR8G8B8A8Unorm,
+            // .format =
+            //     hwBufProps
+            //         .get<vk::AndroidHardwareBufferFormatPropertiesANDROID>()
+            //         .format,
+            //            .components = {.r =
+            //            vk::ComponentSwizzle::eR,
+            //                           .g =
+            //                           vk::ComponentSwizzle::eG,
+            //                           .b =
+            //                           vk::ComponentSwizzle::eB,
+            //                           .a =
+            //                           vk::ComponentSwizzle::eA},
+            .subresourceRange = {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            }
+        };
+
+        watTexture.imageView = device.createImageView(viewInfo);
+
+        transitionImageLayout(
+            watTexture.image,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eShaderReadOnlyOptimal
+        );
+
+        vk::DescriptorImageInfo descriptorImageInfo{
+            .sampler = *watTextureSampler,
+            .imageView = *watTexture.imageView,
+            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+        };
+
+        std::array descriptorWrites{
+            vk::WriteDescriptorSet{
+                .dstSet = *descriptorSets[0],
+                .dstBinding = 1,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                .pImageInfo = &descriptorImageInfo
+            },
+            vk::WriteDescriptorSet{
+                .dstSet = *descriptorSets[1],
+                .dstBinding = 1,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                .pImageInfo = &descriptorImageInfo
+            }
+        };
+        // vk::WriteDescriptorSet descriptorWrites{
+        //     .dstSet = *descriptorSets[currentFrame],
+        //     .dstBinding = 1,
+        //     .dstArrayElement = 0,
+        //     .descriptorCount = 1,
+        //     .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+        //     .pImageInfo = &descriptorImageInfo
+        // };
+
+        device.updateDescriptorSets(descriptorWrites, nullptr);
+
+        // commandBuffers[currentFrame].bindPipeline(
+        //     vk::PipelineBindPoint::eGraphics, *graphicsPipeline
+        // );
+        //
+        // vk::Viewport viewport{
+        //     .x = 0.0f,
+        //     .y = 0.0f,
+        //     .width = static_cast<float>(swapChainExtent.width),
+        //     .height = static_cast<float>(swapChainExtent.height),
+        //     .minDepth = 0.0f,
+        //     .maxDepth = 1.0f
+        // };
+        // commandBuffers[currentFrame].setViewport(0, viewport);
+        //
+        // vk::Rect2D scissor{.offset = {0, 0}, .extent = swapChainExtent};
+        // commandBuffers[currentFrame].setScissor(0, scissor);
+        //
+        // commandBuffers[currentFrame].bindVertexBuffers(0, {*vertexBuffer},
+        // {0}); commandBuffers[currentFrame].bindIndexBuffer(
+        //     *indexBuffer,
+        //     0,
+        //     vk::IndexTypeValue<decltype(indices)::value_type>::value
+        // );
+        // commandBuffers[currentFrame].bindDescriptorSets(
+        //     vk::PipelineBindPoint::eGraphics,
+        //     *pipelineLayout,
+        //     0,
+        //     {*descriptorSets[currentFrame]},
+        //     nullptr
+        // );
+        // commandBuffers[currentFrame].drawIndexed(
+        //     static_cast<uint32_t>(indices.size()), 1, 0, 0, 0
+        // );
+        //
+        // commandBuffers[currentFrame].endRenderPass();
+        // commandBuffers[currentFrame].end();
+        //
+        // device.resetFences({*inFlightFences[currentFrame]});
+        //
+        // vk::PipelineStageFlags waitDestinationStageMask(
+        //     vk::PipelineStageFlagBits::eColorAttachmentOutput
+        // );
+        // const vk::SubmitInfo submitInfo{
+        //     .waitSemaphoreCount = 1,
+        //     .pWaitSemaphores = &*imageAvailableSemaphores[semaphoreIndex],
+        //     .pWaitDstStageMask = &waitDestinationStageMask,
+        //     .commandBufferCount = 1,
+        //     .pCommandBuffers = &*commandBuffers[currentFrame],
+        //     .signalSemaphoreCount = 1,
+        //     .pSignalSemaphores = &*renderFinishedSemaphores[imageIndex]
+        // };
+        // queue.submit(submitInfo, *inFlightFences[currentFrame]);
+        //
+        // const vk::PresentInfoKHR presentInfoKHR{
+        //     .waitSemaphoreCount = 1,
+        //     .pWaitSemaphores = &*renderFinishedSemaphores[imageIndex],
+        //     .swapchainCount = 1,
+        //     .pSwapchains = &*swapChain,
+        //     .pImageIndices = &imageIndex
+        // };
+        //
+        // vk::Result result;
+        // try {
+        //     result = queue.presentKHR(presentInfoKHR);
+        // } catch (vk::OutOfDateKHRError&) {
+        //     result = vk::Result::eErrorOutOfDateKHR;
+        // }
+        //
+        // if (result == vk::Result::eErrorOutOfDateKHR ||
+        //     result == vk::Result::eSuboptimalKHR || framebufferResized) {
+        //     framebufferResized = false;
+        //     recreateSwapChain();
+        // } else if (result != vk::Result::eSuccess) {
+        //     throw std::runtime_error("Failed to present swap chain image");
+        // }
+        //
+        // semaphoreIndex = (semaphoreIndex + 1) %
+        // imageAvailableSemaphores.size(); currentFrame = (currentFrame + 1) %
+        // MAX_FRAMES_IN_FLIGHT;
     }
 
     // Draw frame
@@ -547,17 +843,21 @@ class VulkanApplication {
     vk::raii::Buffer indexBuffer = nullptr;
     vk::raii::DeviceMemory indexBufferMemory = nullptr;
 
-    vk::raii::Image textureImage = nullptr;
-    vk::raii::DeviceMemory textureImageMemory = nullptr;
-    vk::raii::ImageView textureImageView = nullptr;
-    vk::raii::Sampler textureSampler = nullptr;
-
-    struct CamTexture {
+    struct TextureData {
         vk::raii::Image image = nullptr;
         vk::raii::DeviceMemory memory = nullptr;
         vk::raii::ImageView imageView = nullptr;
     };
-    std::vector<CamTexture> camTextures;
+
+    std::vector<TextureData> watTextures;
+    // todo: remove
+    // vk::raii::Image textureImage = nullptr;
+    // vk::raii::DeviceMemory textureImageMemory = nullptr;
+    // vk::raii::ImageView textureImageView = nullptr;
+
+    vk::raii::Sampler watTextureSampler = nullptr;
+
+    std::vector<TextureData> camTextures;
     vk::raii::SamplerYcbcrConversion camTexConversion = nullptr;
     vk::raii::Sampler camTextureSampler = nullptr;
 
@@ -583,10 +883,10 @@ class VulkanApplication {
         {{-1.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
 
         // texture vertices
-        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
+        {{-1.0f, -1.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+        {{1.0f, -1.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+        {{1.0f, 1.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+        {{-1.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
     };
 
     const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
@@ -1047,7 +1347,13 @@ class VulkanApplication {
 
         // Color blending
         vk::PipelineColorBlendAttachmentState colorBlendAttachment{
-            .blendEnable = vk::False,
+            .blendEnable = vk::True,
+            .srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
+            .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+            .colorBlendOp = vk::BlendOp::eAdd,
+            .srcAlphaBlendFactor = vk::BlendFactor::eOne,
+            .dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+            .alphaBlendOp = vk::BlendOp::eAdd,
             .colorWriteMask = vk::ColorComponentFlagBits::eR |
                               vk::ColorComponentFlagBits::eG |
                               vk::ColorComponentFlagBits::eB |
@@ -1200,11 +1506,13 @@ class VulkanApplication {
             .initialLayout = vk::ImageLayout::eUndefined
         };
 
-        textureImage = device.createImage(imageInfo);
+        watTextures.resize(1);
+
+        watTextures[0].image = device.createImage(imageInfo);
 
         // Allocate memory for the image
         vk::MemoryRequirements memRequirements =
-            textureImage.getMemoryRequirements();
+            watTextures[0].image.getMemoryRequirements();
 
         vk::MemoryAllocateInfo allocInfo{
             .allocationSize = memRequirements.size,
@@ -1214,24 +1522,24 @@ class VulkanApplication {
             )
         };
 
-        textureImageMemory = device.allocateMemory(allocInfo);
-        textureImage.bindMemory(*textureImageMemory, 0);
+        watTextures[0].memory = device.allocateMemory(allocInfo);
+        watTextures[0].image.bindMemory(*watTextures[0].memory, 0);
 
         // Transition image layout and copy buffer to image
         // todo: see how in desktop tutor
         transitionImageLayout(
-            textureImage,
+            watTextures[0].image,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eTransferDstOptimal
         );
         copyBufferToImage(
             stagingBuffer,
-            textureImage,
+            watTextures[0].image,
             static_cast<uint32_t>(texWidth),
             static_cast<uint32_t>(texHeight)
         );
         transitionImageLayout(
-            textureImage,
+            watTextures[0].image,
             vk::ImageLayout::eTransferDstOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal
         );
@@ -1239,33 +1547,33 @@ class VulkanApplication {
 
     // Create texture image view
     void createTextureImageView() {
-        textureImageView =
-            createImageView(textureImage, vk::Format::eR8G8B8A8Unorm);
+        watTextures[0].imageView =
+            createImageView(watTextures[0].image, vk::Format::eR8G8B8A8Unorm);
     }
 
     // Create texture sampler
     void createTextureSamplers() {
-        vk::PhysicalDeviceProperties properties =
-            physicalDevice.getProperties();
+        // vk::PhysicalDeviceProperties properties =
+        //     physicalDevice.getProperties();
         vk::SamplerCreateInfo samplerInfo{
             .magFilter = vk::Filter::eLinear,
             .minFilter = vk::Filter::eLinear,
-            .mipmapMode = vk::SamplerMipmapMode::eLinear,
-            .addressModeU = vk::SamplerAddressMode::eRepeat,
-            .addressModeV = vk::SamplerAddressMode::eRepeat,
-            .addressModeW = vk::SamplerAddressMode::eRepeat,
+            .mipmapMode = vk::SamplerMipmapMode::eNearest,
+            .addressModeU = vk::SamplerAddressMode::eClampToEdge,
+            .addressModeV = vk::SamplerAddressMode::eClampToEdge,
+            .addressModeW = vk::SamplerAddressMode::eClampToEdge,
             .mipLodBias = 0.0f,
-            .anisotropyEnable = vk::True,
-            .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
+            .anisotropyEnable = vk::False,
+            .maxAnisotropy = 1,
             .compareEnable = vk::False,
-            .compareOp = vk::CompareOp::eAlways,
+            .compareOp = vk::CompareOp::eNever,
             .minLod = 0.0f,
-            .maxLod = vk::LodClampNone,
-            .borderColor = vk::BorderColor::eIntOpaqueBlack,
+            .maxLod = 0.0f,
+            .borderColor = vk::BorderColor::eFloatOpaqueWhite,
             .unnormalizedCoordinates = vk::False
         };
 
-        textureSampler = device.createSampler(samplerInfo);
+        watTextureSampler = device.createSampler(samplerInfo);
 
         // todo: create with correct format
         vk::ExternalFormatANDROID extFormatAndroid{.externalFormat = 647};
@@ -1445,13 +1753,13 @@ class VulkanApplication {
                 .range = sizeof(UniformBufferObject)
             };
 
-            vk::DescriptorImageInfo imageInfo{
-                .sampler = *textureSampler,
-                .imageView = *textureImageView,
-                .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-            };
+            // vk::DescriptorImageInfo imageInfo{
+            //     .sampler = *watTextureSampler,
+            //     .imageView = *watTextures[0].imageView,
+            //     .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+            // };
 
-            std::array<vk::WriteDescriptorSet, 2> descriptorWrites = {
+            std::array<vk::WriteDescriptorSet, 1> descriptorWrites = {
                 vk::WriteDescriptorSet{
                     .dstSet = *descriptorSets[i],
                     .dstBinding = 0,
@@ -1460,14 +1768,15 @@ class VulkanApplication {
                     .descriptorType = vk::DescriptorType::eUniformBuffer,
                     .pBufferInfo = &bufferInfo
                 },
-                vk::WriteDescriptorSet{
-                    .dstSet = *descriptorSets[i],
-                    .dstBinding = 1,
-                    .dstArrayElement = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                    .pImageInfo = &imageInfo
-                }
+                // vk::WriteDescriptorSet{
+                //     .dstSet = *descriptorSets[i],
+                //     .dstBinding = 1,
+                //     .dstArrayElement = 0,
+                //     .descriptorCount = 1,
+                //     .descriptorType =
+                //     vk::DescriptorType::eCombinedImageSampler, .pImageInfo =
+                //     &imageInfo
+                // }
             };
 
             device.updateDescriptorSets(descriptorWrites, nullptr);
@@ -1963,10 +2272,14 @@ class VulkanApplication {
         );
         ubo.watModel =
             glm::translate(glm::mat4(1), glm::vec3(0.0f, 0.0f, 0.0f)) *
-            glm::rotate(glm::mat4(1), angle, glm::vec3(0.0f, 0.0f, 1.0f)) *
-            glm::scale(glm::mat4(1), glm::vec3(0.25f, 0.25f, 0.0f));
+            glm::rotate(
+                glm::mat4(1),
+                /*angle*/ glm::radians(0.0f),
+                glm::vec3(0.0f, 0.0f, 1.0f)
+            ) *
+            glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 0.0f));
         ubo.view = glm::lookAt(
-            glm::vec3(0.0f, /*eyeY*/ maxEyeY, 2.0f),
+            glm::vec3(0.0f, /*eyeY maxEyeY*/ 0.0f, 4.0f),
             glm::vec3(0.0f, 0.0f, 0.0f),
             glm::vec3(0.0f, 1.0f, 0.0f)
         );

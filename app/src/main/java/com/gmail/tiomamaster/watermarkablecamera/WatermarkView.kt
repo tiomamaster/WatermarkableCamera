@@ -24,7 +24,7 @@ class WatermarkView @JvmOverloads constructor(
             measure(widthMeasureSpec, heightMeasureSpec)
             layout(0, 0, measuredWidth, measuredHeight)
 
-            val surfaceCanvas = surface?.lockCanvas(null)
+            val surfaceCanvas = surface?.lockHardwareCanvas()
             surfaceCanvas?.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
             super.draw(surfaceCanvas!!)
             surface?.unlockCanvasAndPost(surfaceCanvas)

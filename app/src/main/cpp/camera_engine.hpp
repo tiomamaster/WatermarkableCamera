@@ -19,7 +19,8 @@ class CameraEngine {
     void OnAppInitWindow(void);
     void DrawFrame(void);
     AHardwareBuffer* getNextHwBuffer();
-    AImage* getNextImage();
+    AImage* getNextCamImage();
+    AImage* getNextWatImage();
     void OnAppConfigChange(void);
     void OnAppTermWindow(void);
 
@@ -40,6 +41,8 @@ class CameraEngine {
     void CreateCamera(void);
     void DeleteCamera(void);
 
+    ImageReader* getWatImageReader() const noexcept;
+
   private:
     //    void OnPhotoTaken(const char* fileName);
     int GetDisplayRotation();
@@ -51,6 +54,7 @@ class CameraEngine {
     volatile bool cameraReady_;
     NDKCamera* camera_;
     ImageReader* yuvReader_;
+    ImageReader* watReader_;
     ImageReader* jpgReader_;
 };
 

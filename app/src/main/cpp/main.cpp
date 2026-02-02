@@ -1,7 +1,12 @@
+#include <android/hardware_buffer_jni.h>
+#include <android/native_window.h>
+#include <android/native_window_jni.h>
 #include <game-activity/native_app_glue/android_native_app_glue.h>
+#include <jni.h>
 
 #include "camera_engine.hpp"
 #include "hellovk.hpp"
+#include "image_reader.hpp"
 
 struct AppState {
     android_app* androidApp = nullptr;
@@ -9,6 +14,8 @@ struct AppState {
     CameraEngine* camEngine = nullptr;
     bool canRender = false;
 };
+
+VulkanApplication vkApp{};
 
 /**
  * Called by the Android runtime whenever events happen so the
@@ -65,11 +72,40 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
     }
 }
 
+CameraEngine* camEng;
+
+void drawFrame(AImage* image, bool isCam) {
+    if (!image) return;
+
+    // LOGI("Next image acquired");
+
+    AHardwareBuffer* hwBuffer;
+    media_status_t status = AImage_getHardwareBuffer(image, &hwBuffer);
+
+    if (status != AMEDIA_OK) {
+        LOGE("Can't acquire hw buffer");
+        AImage_delete(image);
+        return;
+    }
+
+    AHardwareBuffer_acquire(hwBuffer);
+    // LOGI("Buffer %p acquired by vk renderer", hwBuffer);
+
+    if (isCam) {
+        vkApp.hwBufferToTexture(hwBuffer);
+    } else {
+        vkApp.watHwBufferToTexture(hwBuffer);
+    }
+
+    AHardwareBuffer_release(hwBuffer);
+    AImage_delete(image);
+}
+
 // Android main entry point required by the Android Glue library
 [[maybe_unused]] void android_main(struct android_app* app) {
     AppState appState{};
-    VulkanApplication vkApp{};
     CameraEngine camEngine(app);
+    camEng = &camEngine;
 
     appState.androidApp = app;
     appState.vkApp = &vkApp;
@@ -91,26 +127,56 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
             }
         }
 
-        AImage* image = camEngine.getNextImage();
-        if (!image) continue;
-
-        LOGI("Next image acquired");
-
-        AHardwareBuffer* hwBuffer;
-        media_status_t status = AImage_getHardwareBuffer(image, &hwBuffer);
-
-        if (status != AMEDIA_OK) {
-            LOGE("Can't acquire hw buffer");
-            AImage_delete(image);
-            continue;
-        }
-
-        AHardwareBuffer_acquire(hwBuffer);
-        LOGI("Buffer %p acquired by vk renderer", hwBuffer);
-
-        vkApp.hwBufferToTexture(hwBuffer);
-
-        AHardwareBuffer_release(hwBuffer);
-        AImage_delete(image);
+        drawFrame(camEngine.getNextCamImage(), true);
+        drawFrame(camEngine.getNextWatImage(), false);
     }
+}
+
+void test(JNIEnv* env, jobject a, jobject hardwareBufferObj) {
+    LOGI("test called from jvm side");
+    AHardwareBuffer* hwBuffer =
+        AHardwareBuffer_fromHardwareBuffer(env, hardwareBufferObj);
+    LOGI(
+        "AHardwareBuffer from HardwareBuffer success = %s",
+        hwBuffer != nullptr ? "true" : "false"
+    );
+    AHardwareBuffer_acquire(hwBuffer);
+    LOGI("Buffer %p acquired by vk renderer", hwBuffer);
+
+    vkApp.watHwBufferToTexture(hwBuffer);
+
+    AHardwareBuffer_release(hwBuffer);
+}
+
+jobject getWatermarkSurface(JNIEnv* env, jobject) {
+    LOGI("getWatermarkSurface called");
+    ImageReader* ir = camEng->getWatImageReader();
+    ANativeWindow* nativeWindow = ir->GetNativeWindow();
+    jobject surface = ANativeWindow_toSurface(env, nativeWindow);
+    return surface;
+}
+
+extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM* _Nonnull vm, void* _Nullable) {
+    JNIEnv* env;
+    if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
+        return JNI_ERR;
+    }
+
+    jclass c = env->FindClass(
+        "com/gmail/tiomamaster/watermarkablecamera/VulkanActivity"
+    );
+    if (c == nullptr) return JNI_ERR;
+
+    static const JNINativeMethod methods[] = {
+        {"test",
+         "(Landroid/hardware/HardwareBuffer;)V",
+         reinterpret_cast<void*>(test)},
+        {"getWatermarkSurface",
+         "()Landroid/view/Surface;",
+         reinterpret_cast<jobject*>(getWatermarkSurface)}
+    };
+    int rc = env->RegisterNatives(c, methods, 2);
+    if (rc != JNI_OK) return rc;
+
+    return JNI_VERSION_1_6;
 }

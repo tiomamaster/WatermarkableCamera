@@ -90,7 +90,8 @@ void ImageReader::ImageCallback(AImageReader* reader) {
         std::thread writeFileHandler(&ImageReader::WriteFile, this, image);
         writeFileHandler.detach();
     } else if (format == AIMAGE_FORMAT_YUV_420_888) {
-        LOGI("ImageCallback called for AIMAGE_FORMAT_YUV_420_888 format");
+        //        LOGI("ImageCallback called for AIMAGE_FORMAT_YUV_420_888
+        //        format");
     }
 }
 

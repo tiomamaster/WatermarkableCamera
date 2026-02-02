@@ -1,21 +1,90 @@
 package com.gmail.tiomamaster.watermarkablecamera
 
 import android.annotation.SuppressLint
+import android.hardware.HardwareBuffer
 import android.os.Build.VERSION
 import android.os.Build.VERSION_CODES
 import android.os.Bundle
+import android.os.Handler
+import android.util.Log
 import android.view.KeyEvent
+import android.view.Surface
 import android.view.View
 import android.view.WindowManager.LayoutParams
+import androidx.appcompat.widget.AppCompatImageView
+import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.google.androidgamesdk.GameActivity
+import kotlin.concurrent.fixedRateTimer
+import kotlin.random.Random
 
 class VulkanActivity : GameActivity() {
+
+    private lateinit var watermark: WatermarkView
+    private lateinit var watermarkText: AppCompatTextView
+    private lateinit var watermarkImage: AppCompatImageView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         hideSystemUI()
+
+        Handler(mainLooper).postDelayed({
+            setupWatermark()
+        }, 1000)
+
+        var i = 0
+        fixedRateTimer(period = 1000, initialDelay = 1500) {
+            watermarkText.text = "${++i}"
+            // TODO: animate it
+            watermarkImage.x = Random.nextDouble(0.0, watermark.width.toDouble()).toFloat()
+            watermarkImage.y = Random.nextDouble(0.0, watermark.height.toDouble()).toFloat()
+            watermark.update()
+        }
+    }
+
+    @SuppressLint("InflateParams", "Recycle")
+    private fun setupWatermark() {
+        watermark = layoutInflater.inflate(R.layout.watermark, null) as WatermarkView
+        watermarkText = watermark.findViewById(R.id.text)
+        watermarkImage = watermark.findViewById(R.id.img)
+        with(watermark) {
+            val w = windowManager.currentWindowMetrics.bounds.width()
+            val h = windowManager.currentWindowMetrics.bounds.height()
+            val widthMeasureSpec =
+                View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY)
+            val heightMeasureSpec =
+                View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY)
+            this.widthMeasureSpec = widthMeasureSpec
+            this.heightMeasureSpec = heightMeasureSpec
+            Log.i(TAG, "Setup watermark with size $w:$h")
+
+//            val watImageReader = ImageReader.newInstance(
+//                w,
+//                h,
+//                PixelFormat.RGBA_8888,
+//                2,
+//                HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE
+//            )
+
+//            surface = watImageReader.surface
+            surface = getWatermarkSurface()
+
+//            watImageReader.setOnImageAvailableListener({
+//                Log.i(TAG, "new image available")
+//                val image = it.acquireLatestImage()
+//                val hwBuff = image.hardwareBuffer
+//                // process hwBuff, like render image using vk
+//                Log.i(
+//                    TAG,
+//                    "hardware buffer acquired, ${hwBuff?.width}:${hwBuff?.height}:${hwBuff?.format}"
+//                )
+//                test(hwBuff!!)
+//                hwBuff.close()
+//                image.close()
+//            }, null)
+            update()
+        }
     }
 
     private fun hideSystemUI() {
@@ -60,9 +129,14 @@ class VulkanActivity : GameActivity() {
         System.exit(0)
     }
 
-    companion object {
+    private external fun test(hwBuff: HardwareBuffer)
+    private external fun getWatermarkSurface(): Surface
+
+    private companion object {
         init {
             System.loadLibrary("WatermarkableCameraJNI")
         }
+
+        val TAG: String = VulkanActivity::class.java.simpleName
     }
 }

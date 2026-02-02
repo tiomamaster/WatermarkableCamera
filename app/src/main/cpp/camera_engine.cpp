@@ -14,6 +14,7 @@ CameraEngine::CameraEngine(android_app* app)
       cameraReady_(false),
       camera_(nullptr),
       yuvReader_(nullptr),
+      watReader_(nullptr),
       jpgReader_(nullptr) {
     memset(&savedNativeWinRes_, 0, sizeof(savedNativeWinRes_));
 }
@@ -56,7 +57,7 @@ void CameraEngine::CreateCamera(void) {
         rotation_,
         imageRotation
     );
-    ImageFormat view{0, 0, 0}, capture{0, 0, 0};
+    ImageFormat view{0, 0, 0}, capture{0, 0, 0}, wat{1080, 2400, 0};
     camera_->MatchCaptureSizeRequest(app_->window, &view, &capture);
 
     ASSERT(view.width && view.height, "Could not find supportable resolution");
@@ -73,6 +74,8 @@ void CameraEngine::CreateCamera(void) {
 
     yuvReader_ = new ImageReader(&view, AIMAGE_FORMAT_YUV_420_888);
     yuvReader_->SetPresentRotation(imageRotation);
+    watReader_ = new ImageReader(&wat, AIMAGE_FORMAT_RGBA_8888);
+    watReader_->SetPresentRotation(imageRotation);
     //    jpgReader_ = new ImageReader(&capture, AIMAGE_FORMAT_JPEG);
     //    jpgReader_->SetPresentRotation(imageRotation);
     //    jpgReader_->RegisterCallback(this, [](void* ctx, const char* str) ->
@@ -97,10 +100,18 @@ void CameraEngine::DeleteCamera(void) {
         delete yuvReader_;
         yuvReader_ = nullptr;
     }
+    if (watReader_) {
+        delete watReader_;
+        watReader_ = nullptr;
+    }
     if (jpgReader_) {
         delete jpgReader_;
         jpgReader_ = nullptr;
     }
+}
+
+ImageReader* CameraEngine::getWatImageReader() const noexcept {
+    return watReader_;
 }
 
 /**
@@ -182,9 +193,16 @@ AHardwareBuffer* CameraEngine::getNextHwBuffer() {
     return hwBuffer;
 }
 
-AImage* CameraEngine::getNextImage() {
+AImage* CameraEngine::getNextCamImage() {
     if (!cameraReady_ || !yuvReader_) return nullptr;
     AImage* image = yuvReader_->GetNextImage();
+    if (!image) return nullptr;
+    return image;
+}
+
+AImage* CameraEngine::getNextWatImage() {
+    if (!watReader_) return nullptr;
+    AImage* image = watReader_->GetNextImage();
     if (!image) return nullptr;
     return image;
 }

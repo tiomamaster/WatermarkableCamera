@@ -29,8 +29,9 @@ VSOutput vertMain(VSInput input, uint vertexID: SV_VertexID) {
         output.pos = mul(ubo.camModel, float4(input.inPosition, 0.0, 1.0));
         output.isCam = true;
     } else {
-        output.pos =
-            mul(ubo.proj, mul(ubo.view, mul(ubo.model, float4(input.inPosition, 0.0, 1.0))));
+        output.pos = float4(input.inPosition, 0.0, 1.0);
+        // output.pos =
+        //     mul(ubo.proj, mul(ubo.view, mul(ubo.model, float4(input.inPosition, 0.0, 1.0))));
         output.isCam = false;
     }
     output.color = input.inColor;
