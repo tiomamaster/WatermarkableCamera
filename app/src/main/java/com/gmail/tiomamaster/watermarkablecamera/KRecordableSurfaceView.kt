@@ -97,7 +97,6 @@ class KRecordableSurfaceView @JvmOverloads constructor(
         throw IllegalStateException("Cannot stop. Is not recording.")
     }
 
-
     inner class RenderHandler(looper: Looper) : Handler(looper),
         SurfaceTexture.OnFrameAvailableListener, SurfaceHolder.Callback2 {
 
@@ -118,9 +117,7 @@ class KRecordableSurfaceView @JvmOverloads constructor(
         )
 
         init {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                configAttribList[10] = EGLExt.EGL_RECORDABLE_ANDROID
-            }
+            configAttribList[10] = EGLExt.EGL_RECORDABLE_ANDROID
         }
 
         private fun createResources(surface: Surface) {

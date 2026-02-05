@@ -20,6 +20,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+        <meta-data
+            android:name="android.app.lib_name"
+            android:value="WatermarkableCameraJNI"/>
         <activity
             android:name=".VulkanActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"

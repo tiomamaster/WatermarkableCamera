@@ -156,6 +156,12 @@ jobject getWatermarkSurface(JNIEnv* env, jobject) {
     return surface;
 }
 
+void setMediaSurface(JNIEnv* env, jobject, jobject surface) {
+    LOGI("setMediaSurface called");
+    ANativeWindow* mediaWindow = ANativeWindow_fromSurface(env, surface);
+    vkApp.setMediaWindow(mediaWindow);
+}
+
 extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM* _Nonnull vm, void* _Nullable) {
     JNIEnv* env;
     if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
@@ -173,9 +179,12 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM* _Nonnull vm, void* _Nullable) {
          reinterpret_cast<void*>(test)},
         {"getWatermarkSurface",
          "()Landroid/view/Surface;",
-         reinterpret_cast<jobject*>(getWatermarkSurface)}
+         reinterpret_cast<jobject*>(getWatermarkSurface)},
+        {"setMediaSurface",
+         "(Landroid/view/Surface;)V",
+         reinterpret_cast<void*>(setMediaSurface)}
     };
-    int rc = env->RegisterNatives(c, methods, 2);
+    int rc = env->RegisterNatives(c, methods, 3);
     if (rc != JNI_OK) return rc;
 
     return JNI_VERSION_1_6;

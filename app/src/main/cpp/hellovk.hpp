@@ -138,6 +138,44 @@ static std::vector<char> readFile(
 
 class VulkanApplication {
   public:
+    void setMediaWindow(ANativeWindow* win) {
+        mediaWindow = win;
+
+        vk::AndroidSurfaceCreateInfoKHR createInfo{
+            .sType = vk::StructureType::eAndroidSurfaceCreateInfoKHR,
+            .pNext = nullptr,
+            .flags = vk::AndroidSurfaceCreateFlagsKHR(),
+            .window = mediaWindow
+        };
+
+        mediaSurface = vk::raii::SurfaceKHR(instance, createInfo);
+
+        SwapChainSupportDetails swapChainSupport =
+            querySwapChainSupport(physicalDevice, *mediaSurface);
+        mediaSwapChainExtent = chooseSwapExtent(swapChainSupport.capabilities);
+        mediaSwapChainSurfaceFormat =
+            chooseSwapSurfaceFormat(swapChainSupport.formats);
+        vk::SwapchainCreateInfoKHR swapChainCreateInfo{
+            .surface = *mediaSurface,
+            .minImageCount =
+                chooseSwapMinImageCount(swapChainSupport.capabilities),
+            .imageFormat = mediaSwapChainSurfaceFormat.format,
+            .imageColorSpace = mediaSwapChainSurfaceFormat.colorSpace,
+            .imageExtent = mediaSwapChainExtent,
+            .imageArrayLayers = 1,
+            // ??? if render to it, eTransferDst if copy
+            .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+            .imageSharingMode = vk::SharingMode::eExclusive,
+            .preTransform = swapChainSupport.capabilities.currentTransform,
+            .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eInherit,
+            .presentMode = chooseSwapPresentMode(swapChainSupport.presentModes),
+            .clipped = true
+        };
+
+        mediaSwapChain = device.createSwapchainKHR(swapChainCreateInfo);
+        mediaSwapChainImages = mediaSwapChain.getImages();
+    }
+
     // Initialize Vulkan
     void initVulkan() {
         createInstance();
@@ -811,6 +849,7 @@ class VulkanApplication {
 
   private:
     ANativeWindow* window = nullptr;
+    ANativeWindow* mediaWindow = nullptr;
     AAssetManager* assetManager = nullptr;
 
     bool framebufferResized = false;
@@ -819,7 +858,8 @@ class VulkanApplication {
     vk::raii::Context context;
     vk::raii::Instance instance = nullptr;
     vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
-    vk::raii::SurfaceKHR surface = nullptr;
+    vk::raii::SurfaceKHR displaySurface = nullptr;
+    vk::raii::SurfaceKHR mediaSurface = nullptr;
     vk::raii::PhysicalDevice physicalDevice = nullptr;
     vk::raii::Device device = nullptr;
     // todo: separate to transfer and graphics queues
@@ -830,6 +870,12 @@ class VulkanApplication {
     vk::SurfaceFormatKHR swapChainSurfaceFormat;
     vk::Extent2D swapChainExtent;
     std::vector<vk::raii::ImageView> swapChainImageViews;
+
+    vk::raii::SwapchainKHR mediaSwapChain = nullptr;
+    std::vector<vk::Image> mediaSwapChainImages;
+    vk::SurfaceFormatKHR mediaSwapChainSurfaceFormat;
+    vk::Extent2D mediaSwapChainExtent;
+    std::vector<vk::raii::ImageView> mediaSwapChainImageViews;
 
     vk::raii::RenderPass renderPass = nullptr;
     vk::raii::DescriptorSetLayout descriptorSetLayout = nullptr;
@@ -943,7 +989,7 @@ class VulkanApplication {
             .window = window
         };
 
-        surface = vk::raii::SurfaceKHR(instance, createInfo);
+        displaySurface = vk::raii::SurfaceKHR(instance, createInfo);
     }
 
     // Pick physical device
@@ -1051,7 +1097,9 @@ class VulkanApplication {
              qfpIndex++) {
             if ((queueFamilyProperties[qfpIndex].queueFlags &
                  vk::QueueFlagBits::eGraphics) &&
-                physicalDevice.getSurfaceSupportKHR(qfpIndex, *surface)) {
+                physicalDevice.getSurfaceSupportKHR(
+                    qfpIndex, *displaySurface
+                )) {
                 // found a queue family that supports both
                 // graphics and present
                 queueIndex = qfpIndex;
@@ -1129,12 +1177,12 @@ class VulkanApplication {
     // Create swap chain
     void createSwapChain() {
         SwapChainSupportDetails swapChainSupport =
-            querySwapChainSupport(physicalDevice);
+            querySwapChainSupport(physicalDevice, *displaySurface);
         swapChainExtent = chooseSwapExtent(swapChainSupport.capabilities);
         swapChainSurfaceFormat =
             chooseSwapSurfaceFormat(swapChainSupport.formats);
         vk::SwapchainCreateInfoKHR swapChainCreateInfo{
-            .surface = *surface,
+            .surface = *displaySurface,
             .minImageCount =
                 chooseSwapMinImageCount(swapChainSupport.capabilities),
             .imageFormat = swapChainSurfaceFormat.format,
@@ -2010,12 +2058,12 @@ class VulkanApplication {
 
     // Query swap chain support
     SwapChainSupportDetails querySwapChainSupport(
-        vk::raii::PhysicalDevice device
+        vk::raii::PhysicalDevice device, vk::SurfaceKHR surface
     ) {
         SwapChainSupportDetails details;
-        details.capabilities = device.getSurfaceCapabilitiesKHR(*surface);
-        details.formats = device.getSurfaceFormatsKHR(*surface);
-        details.presentModes = device.getSurfacePresentModesKHR(*surface);
+        details.capabilities = device.getSurfaceCapabilitiesKHR(surface);
+        details.formats = device.getSurfaceFormatsKHR(surface);
+        details.presentModes = device.getSurfacePresentModesKHR(surface);
         return details;
     }
 
