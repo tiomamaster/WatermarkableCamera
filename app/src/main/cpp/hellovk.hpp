@@ -138,6 +138,137 @@ static std::vector<char> readFile(
 
 class VulkanApplication {
   public:
+    void setMediaWindow(ANativeWindow* win) {
+        mediaWindow = win;
+
+        vk::AndroidSurfaceCreateInfoKHR createInfo{
+            .sType = vk::StructureType::eAndroidSurfaceCreateInfoKHR,
+            .pNext = nullptr,
+            .flags = vk::AndroidSurfaceCreateFlagsKHR(),
+            .window = mediaWindow
+        };
+
+        mediaSurface = vk::raii::SurfaceKHR(instance, createInfo);
+
+        SwapChainSupportDetails swapChainSupport =
+            querySwapChainSupport(physicalDevice, *mediaSurface);
+        mediaSwapChainExtent = chooseSwapExtent(swapChainSupport.capabilities);
+        mediaSwapChainSurfaceFormat =
+            chooseSwapSurfaceFormat(swapChainSupport.formats);
+        vk::SwapchainCreateInfoKHR swapChainCreateInfo{
+            .surface = *mediaSurface,
+            .minImageCount =
+                chooseSwapMinImageCount(swapChainSupport.capabilities),
+            .imageFormat = mediaSwapChainSurfaceFormat.format,
+            .imageColorSpace = mediaSwapChainSurfaceFormat.colorSpace,
+            .imageExtent = mediaSwapChainExtent,
+            .imageArrayLayers = 1,
+            // ??? if render to it, eTransferDst if copy
+            .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+            .imageSharingMode = vk::SharingMode::eExclusive,
+            .preTransform = swapChainSupport.capabilities.currentTransform,
+            .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eInherit,
+            .presentMode = chooseSwapPresentMode(swapChainSupport.presentModes),
+            .clipped = true
+        };
+
+        LOGI(
+            "media swapchain min image count = %i",
+            swapChainCreateInfo.minImageCount
+        );
+
+        mediaSwapChain = device.createSwapchainKHR(swapChainCreateInfo);
+        mediaSwapChainImages = mediaSwapChain.getImages();
+
+        LOGI(
+            "media swapchain images count = %i",
+            (int)mediaSwapChainImages.size()
+        );
+        LOGI("swapchain images count = %i", (int)swapChainImages.size());
+        LOGI("swapchain format = %i", (int)swapChainSurfaceFormat.format);
+        LOGI(
+            "swapchain media format = %i",
+            (int)mediaSwapChainSurfaceFormat.format
+        );
+        LOGI(
+            "media swapchain w = %i, h = %i",
+            mediaSwapChainExtent.width,
+            mediaSwapChainExtent.height
+        );
+
+        assert(mediaSwapChainImageViews.empty());
+        mediaSwapChainImageViews.reserve(mediaSwapChainImages.size());
+
+        for (const auto& image : mediaSwapChainImages) {
+            vk::ImageViewCreateInfo createInfo{
+                .image = image,
+                .viewType = vk::ImageViewType::e2D,
+                .format = mediaSwapChainSurfaceFormat.format,
+                .components =
+                    {.r = vk::ComponentSwizzle::eIdentity,
+                     .g = vk::ComponentSwizzle::eIdentity,
+                     .b = vk::ComponentSwizzle::eIdentity,
+                     .a = vk::ComponentSwizzle::eIdentity},
+                .subresourceRange = {
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1
+                }
+            };
+
+            mediaSwapChainImageViews.emplace_back(
+                device.createImageView(createInfo)
+            );
+        }
+
+        assert(mediaSwapChainFramebuffers.empty());
+        mediaSwapChainFramebuffers.reserve(mediaSwapChainImageViews.size());
+
+        for (const auto& swapChainImageView : mediaSwapChainImageViews) {
+            vk::ImageView attachments[] = {*swapChainImageView};
+
+            vk::FramebufferCreateInfo framebufferInfo{
+                .renderPass = *renderPass,
+                .attachmentCount = 1,
+                .pAttachments = attachments,
+                .width = mediaSwapChainExtent.width,
+                .height = mediaSwapChainExtent.height,
+                .layers = 1
+            };
+
+            mediaSwapChainFramebuffers.emplace_back(
+                device.createFramebuffer(framebufferInfo)
+            );
+        }
+
+        mediaImageAvailableSemaphores.clear();
+        mediaRenderFinishedSemaphores.clear();
+        mediaInFlightFences.clear();
+
+        for (size_t i = 0; i < mediaSwapChainImages.size(); ++i) {
+            mediaImageAvailableSemaphores.emplace_back(
+                device, vk::SemaphoreCreateInfo()
+            );
+            mediaRenderFinishedSemaphores.emplace_back(
+                device, vk::SemaphoreCreateInfo()
+            );
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+            mediaInFlightFences.emplace_back(
+                device,
+                vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled}
+            );
+        }
+    }
+
+    void startStopRecording() {
+        isRecording = !isRecording;
+        LOGI("startStopRecording called, isRecording = %d", isRecording.load());
+    }
+
     // Initialize Vulkan
     void initVulkan() {
         createInstance();
@@ -188,8 +319,8 @@ class VulkanApplication {
         // Update uniform buffer with current transformation
         updateUniformBuffer(currentFrame);
 
-        //        device.resetFences({*inFlightFences[currentFrame]});
-        //        commandBuffers[currentFrame].reset();
+        // device.resetFences({*inFlightFences[currentFrame]});
+        // commandBuffers[currentFrame].reset();
 
         vk::CommandBufferBeginInfo beginInfo{};
         commandBuffers[currentFrame].begin(beginInfo);
@@ -443,6 +574,140 @@ class VulkanApplication {
         }
 
         semaphoreIndex = (semaphoreIndex + 1) % imageAvailableSemaphores.size();
+
+        if (isRecording) {
+            while (
+                vk::Result::eTimeout ==
+                device.waitForFences(
+                    *mediaInFlightFences[currentFrame], vk::True, FenceTimeout
+                )
+            );
+
+            uint32_t imageIndex;
+            try {
+                auto [result, idx] = mediaSwapChain.acquireNextImage(
+                    FenceTimeout,
+                    *mediaImageAvailableSemaphores[mediaSemaphoreIndex],
+                    nullptr
+                );
+                imageIndex = idx;
+            } catch (vk::OutOfDateKHRError&) {
+                // recreateSwapChain();
+                return;
+            }
+
+            // Update uniform buffer with current transformation
+            // updateUniformBuffer(currentFrame);
+
+            // device.resetFences({*inFlightFences[currentFrame]});
+            // commandBuffers[currentFrame].reset();
+
+            vk::CommandBufferBeginInfo beginInfo{};
+            commandBuffers[currentFrame].begin(beginInfo);
+
+            vk::RenderPassBeginInfo renderPassInfo{
+                .renderPass = *renderPass,
+                .framebuffer = *mediaSwapChainFramebuffers[imageIndex],
+                .renderArea = {.offset = {0, 0}, .extent = mediaSwapChainExtent}
+            };
+
+            vk::ClearValue clearColor;
+            clearColor.color.float32 =
+                std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f};
+            renderPassInfo.clearValueCount = 1;
+            renderPassInfo.pClearValues = &clearColor;
+
+            commandBuffers[currentFrame].beginRenderPass(
+                renderPassInfo, vk::SubpassContents::eInline
+            );
+
+            commandBuffers[currentFrame].bindPipeline(
+                vk::PipelineBindPoint::eGraphics, *graphicsPipeline
+            );
+
+            vk::Viewport viewport{
+                .x = 0.0f,
+                .y = 0.0f,
+                .width = static_cast<float>(mediaSwapChainExtent.width),
+                .height = static_cast<float>(mediaSwapChainExtent.height),
+                .minDepth = 0.0f,
+                .maxDepth = 1.0f
+            };
+            commandBuffers[currentFrame].setViewport(0, viewport);
+
+            vk::Rect2D scissor{
+                .offset = {0, 0}, .extent = mediaSwapChainExtent
+            };
+            commandBuffers[currentFrame].setScissor(0, scissor);
+
+            commandBuffers[currentFrame].bindVertexBuffers(
+                0, {*vertexBuffer}, {0}
+            );
+            commandBuffers[currentFrame].bindIndexBuffer(
+                *indexBuffer,
+                0,
+                vk::IndexTypeValue<decltype(indices)::value_type>::value
+            );
+            commandBuffers[currentFrame].bindDescriptorSets(
+                vk::PipelineBindPoint::eGraphics,
+                *pipelineLayout,
+                0,
+                {*descriptorSets[currentFrame]},
+                nullptr
+            );
+
+            uint32_t indexCount = static_cast<uint32_t>(indices.size() / 2);
+            if (watTextures.size() > 0) {
+                indexCount = static_cast<uint32_t>(indices.size());
+            }
+            commandBuffers[currentFrame].drawIndexed(indexCount, 1, 0, 0, 0);
+
+            commandBuffers[currentFrame].endRenderPass();
+            commandBuffers[currentFrame].end();
+
+            device.resetFences({*mediaInFlightFences[currentFrame]});
+
+            vk::PipelineStageFlags waitDestinationStageMask(
+                vk::PipelineStageFlagBits::eColorAttachmentOutput
+            );
+            const vk::SubmitInfo submitInfo{
+                .waitSemaphoreCount = 1,
+                .pWaitSemaphores =
+                    &*mediaImageAvailableSemaphores[mediaSemaphoreIndex],
+                .pWaitDstStageMask = &waitDestinationStageMask,
+                .commandBufferCount = 1,
+                .pCommandBuffers = &*commandBuffers[currentFrame],
+                .signalSemaphoreCount = 1,
+                .pSignalSemaphores = &*mediaRenderFinishedSemaphores[imageIndex]
+            };
+            queue.submit(submitInfo, *mediaInFlightFences[currentFrame]);
+
+            const vk::PresentInfoKHR presentInfoKHR{
+                .waitSemaphoreCount = 1,
+                .pWaitSemaphores = &*mediaRenderFinishedSemaphores[imageIndex],
+                .swapchainCount = 1,
+                .pSwapchains = &*mediaSwapChain,
+                .pImageIndices = &imageIndex
+            };
+
+            vk::Result result;
+            try {
+                result = queue.presentKHR(presentInfoKHR);
+            } catch (vk::OutOfDateKHRError&) {
+                result = vk::Result::eErrorOutOfDateKHR;
+            }
+
+            if (result == vk::Result::eErrorOutOfDateKHR ||
+                result == vk::Result::eSuboptimalKHR || framebufferResized) {
+                framebufferResized = false;
+                recreateSwapChain();
+            } else if (result != vk::Result::eSuccess) {
+                throw std::runtime_error("Failed to present swap chain image");
+            }
+            mediaSemaphoreIndex =
+                (semaphoreIndex + 1) % imageAvailableSemaphores.size();
+        }
+
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
@@ -811,15 +1076,19 @@ class VulkanApplication {
 
   private:
     ANativeWindow* window = nullptr;
+    ANativeWindow* mediaWindow = nullptr;
     AAssetManager* assetManager = nullptr;
 
     bool framebufferResized = false;
+
+    std::atomic_bool isRecording = false;
 
     // Vulkan objects
     vk::raii::Context context;
     vk::raii::Instance instance = nullptr;
     vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
-    vk::raii::SurfaceKHR surface = nullptr;
+    vk::raii::SurfaceKHR displaySurface = nullptr;
+    vk::raii::SurfaceKHR mediaSurface = nullptr;
     vk::raii::PhysicalDevice physicalDevice = nullptr;
     vk::raii::Device device = nullptr;
     // todo: separate to transfer and graphics queues
@@ -831,11 +1100,18 @@ class VulkanApplication {
     vk::Extent2D swapChainExtent;
     std::vector<vk::raii::ImageView> swapChainImageViews;
 
+    vk::raii::SwapchainKHR mediaSwapChain = nullptr;
+    std::vector<vk::Image> mediaSwapChainImages;
+    vk::SurfaceFormatKHR mediaSwapChainSurfaceFormat;
+    vk::Extent2D mediaSwapChainExtent;
+    std::vector<vk::raii::ImageView> mediaSwapChainImageViews;
+
     vk::raii::RenderPass renderPass = nullptr;
     vk::raii::DescriptorSetLayout descriptorSetLayout = nullptr;
     vk::raii::PipelineLayout pipelineLayout = nullptr;
     vk::raii::Pipeline graphicsPipeline = nullptr;
     std::vector<vk::raii::Framebuffer> swapChainFramebuffers;
+    std::vector<vk::raii::Framebuffer> mediaSwapChainFramebuffers;
     vk::raii::CommandPool commandPool = nullptr;
     std::vector<vk::raii::CommandBuffer> commandBuffers;
     vk::raii::Buffer vertexBuffer = nullptr;
@@ -865,10 +1141,17 @@ class VulkanApplication {
     std::vector<vk::raii::DeviceMemory> uniformBuffersMemory;
     vk::raii::DescriptorPool descriptorPool = nullptr;
     std::vector<vk::raii::DescriptorSet> descriptorSets;
+
     std::vector<vk::raii::Semaphore> imageAvailableSemaphores;
     std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
     std::vector<vk::raii::Fence> inFlightFences;
+
+    std::vector<vk::raii::Semaphore> mediaImageAvailableSemaphores;
+    std::vector<vk::raii::Semaphore> mediaRenderFinishedSemaphores;
+    std::vector<vk::raii::Fence> mediaInFlightFences;
+
     uint32_t semaphoreIndex = 0;
+    uint32_t mediaSemaphoreIndex = 0;
     uint32_t currentFrame = 0;
 
     // Application info
@@ -943,7 +1226,7 @@ class VulkanApplication {
             .window = window
         };
 
-        surface = vk::raii::SurfaceKHR(instance, createInfo);
+        displaySurface = vk::raii::SurfaceKHR(instance, createInfo);
     }
 
     // Pick physical device
@@ -1051,7 +1334,9 @@ class VulkanApplication {
              qfpIndex++) {
             if ((queueFamilyProperties[qfpIndex].queueFlags &
                  vk::QueueFlagBits::eGraphics) &&
-                physicalDevice.getSurfaceSupportKHR(qfpIndex, *surface)) {
+                physicalDevice.getSurfaceSupportKHR(
+                    qfpIndex, *displaySurface
+                )) {
                 // found a queue family that supports both
                 // graphics and present
                 queueIndex = qfpIndex;
@@ -1129,12 +1414,12 @@ class VulkanApplication {
     // Create swap chain
     void createSwapChain() {
         SwapChainSupportDetails swapChainSupport =
-            querySwapChainSupport(physicalDevice);
+            querySwapChainSupport(physicalDevice, *displaySurface);
         swapChainExtent = chooseSwapExtent(swapChainSupport.capabilities);
         swapChainSurfaceFormat =
             chooseSwapSurfaceFormat(swapChainSupport.formats);
         vk::SwapchainCreateInfoKHR swapChainCreateInfo{
-            .surface = *surface,
+            .surface = *displaySurface,
             .minImageCount =
                 chooseSwapMinImageCount(swapChainSupport.capabilities),
             .imageFormat = swapChainSurfaceFormat.format,
@@ -2010,12 +2295,12 @@ class VulkanApplication {
 
     // Query swap chain support
     SwapChainSupportDetails querySwapChainSupport(
-        vk::raii::PhysicalDevice device
+        vk::raii::PhysicalDevice device, vk::SurfaceKHR surface
     ) {
         SwapChainSupportDetails details;
-        details.capabilities = device.getSurfaceCapabilitiesKHR(*surface);
-        details.formats = device.getSurfaceFormatsKHR(*surface);
-        details.presentModes = device.getSurfacePresentModesKHR(*surface);
+        details.capabilities = device.getSurfaceCapabilitiesKHR(surface);
+        details.formats = device.getSurfaceFormatsKHR(surface);
+        details.presentModes = device.getSurfacePresentModesKHR(surface);
         return details;
     }
 

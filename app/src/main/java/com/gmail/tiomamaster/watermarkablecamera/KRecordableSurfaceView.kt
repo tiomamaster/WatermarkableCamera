@@ -10,7 +10,6 @@ import android.opengl.EGLConfig
 import android.opengl.EGLExt
 import android.opengl.EGLSurface
 import android.opengl.GLES20
-import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
@@ -48,24 +47,23 @@ class KRecordableSurfaceView @JvmOverloads constructor(
     }
 
     fun initRecorder(saveTo: File, desiredWidth: Int, desiredHeight: Int, orientationHint: Int) {
+        this.desiredWidth = desiredWidth
+        this.desiredHeight = desiredHeight
+
         mediaRecorder = MediaRecorder(context).apply {
             setVideoSource(MediaRecorder.VideoSource.SURFACE)
             setInputSurface(mediaSurface)
-            setAudioSource(MediaRecorder.AudioSource.MIC)
+            setAudioSource(MediaRecorder.AudioSource.CAMCORDER)
             setOutputFormat(OutputFormat.MPEG_4)
 
             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setAudioEncodingBitRate(16)
-            setAudioSamplingRate(44100)
+            setAudioEncodingBitRate(10_000_000)
+            setAudioSamplingRate(96000)
+            setAudioChannels(2)
 
             setVideoEncoder(MediaRecorder.VideoEncoder.H264)
-
-            setVideoEncodingBitRate(10000000)
+            setVideoEncodingBitRate(10_000_000)
             setVideoFrameRate(30)
-
-            this@KRecordableSurfaceView.desiredWidth = desiredWidth
-            this@KRecordableSurfaceView.desiredHeight = desiredHeight
-
             setVideoSize(desiredWidth, desiredHeight)
 
             setOrientationHint(orientationHint)
@@ -97,7 +95,6 @@ class KRecordableSurfaceView @JvmOverloads constructor(
         throw IllegalStateException("Cannot stop. Is not recording.")
     }
 
-
     inner class RenderHandler(looper: Looper) : Handler(looper),
         SurfaceTexture.OnFrameAvailableListener, SurfaceHolder.Callback2 {
 
@@ -118,9 +115,7 @@ class KRecordableSurfaceView @JvmOverloads constructor(
         )
 
         init {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                configAttribList[10] = EGLExt.EGL_RECORDABLE_ANDROID
-            }
+            configAttribList[10] = EGLExt.EGL_RECORDABLE_ANDROID
         }
 
         private fun createResources(surface: Surface) {

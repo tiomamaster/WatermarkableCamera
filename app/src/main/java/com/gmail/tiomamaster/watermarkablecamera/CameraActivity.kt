@@ -224,8 +224,6 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
                 View.MeasureSpec.makeMeasureSpec(rsv.height, View.MeasureSpec.EXACTLY)
             this.widthMeasureSpec = widthMeasureSpec
             this.heightMeasureSpec = heightMeasureSpec
-            measure(widthMeasureSpec, heightMeasureSpec)
-            layout(0, 0, watermark.measuredWidth, watermark.measuredHeight)
             update()
         }
     }
@@ -301,7 +299,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             closePreviewSession()
 
             captureRequestBuilder =
-                cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+                cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_RECORD)
 
             val surface = Surface(renderer.cameraSurfaceTexture)
             captureRequestBuilder.addTarget(surface)

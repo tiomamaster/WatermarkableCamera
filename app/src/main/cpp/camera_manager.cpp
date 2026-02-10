@@ -225,7 +225,7 @@ void NDKCamera::CreateSession(
     // Create output from this app's ANativeWindow, and add into output
     // container
     requests_[PREVIEW_REQUEST_IDX].outputNativeWindow_ = previewWindow;
-    requests_[PREVIEW_REQUEST_IDX].template_ = TEMPLATE_PREVIEW;
+    requests_[PREVIEW_REQUEST_IDX].template_ = TEMPLATE_RECORD;
     //    requests_[JPG_CAPTURE_REQUEST_IDX].outputNativeWindow_ = jpgWindow;
     //    requests_[JPG_CAPTURE_REQUEST_IDX].template_ = TEMPLATE_STILL_CAPTURE;
 

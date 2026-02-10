@@ -57,8 +57,8 @@ void CameraEngine::CreateCamera(void) {
         rotation_,
         imageRotation
     );
-    ImageFormat view{0, 0, 0}, capture{0, 0, 0}, wat{1080, 2400, 0};
-    camera_->MatchCaptureSizeRequest(app_->window, &view, &capture);
+    ImageFormat view{1920, 1080, 0}, capture{0, 0, 0}, wat{1080, 1920, 0};
+    // camera_->MatchCaptureSizeRequest(app_->window, &view, &capture);
 
     ASSERT(view.width && view.height, "Could not find supportable resolution");
 
