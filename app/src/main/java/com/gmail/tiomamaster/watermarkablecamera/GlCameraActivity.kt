@@ -1,9 +1,7 @@
 package com.gmail.tiomamaster.watermarkablecamera
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
@@ -131,9 +129,6 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
             return "$dir/$filename"
         }
 
-    private val hasPermissions: Boolean
-        get() = PERMISSIONS.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_camera)
@@ -222,55 +217,51 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
     }
 
     @SuppressLint("MissingPermission")
-    private fun openCamera() {
-        if (!checkAndRequestPermissions()) return
-
-        try {
-            if (!cameraOpenCloseLock.tryAcquire(2500, TimeUnit.MILLISECONDS)) {
-                throw RuntimeException("Time out waiting to lock camera opening.")
-            }
-
-            val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-            val cameraId = cameraManager.cameraIdList.first {
-                cameraManager.getCameraCharacteristics(it)
-                    .get(CameraCharacteristics.LENS_FACING) == cameraFacing
-            }
-            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
-            sensorOrientation = characteristics[CameraCharacteristics.SENSOR_ORIENTATION] ?: 0
-            val configurationMap =
-                characteristics[CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP]
-                    ?: throw RuntimeException("Cannot get available preview/video sizes")
-            val previewSize = /*Size(1920, 1080)*/ choosePreviewSize(
-                configurationMap.getOutputSizes(SurfaceTexture::class.java),
-                rsv.width,
-                rsv.height
-            )
-            renderer.setupCameraSurfaceTexture(previewSize.width, previewSize.height)
-            renderer.cameraSurfaceTexture?.setOnFrameAvailableListener(rsv.renderHandler)
-
-            val screenAsp = if (rsv.width < rsv.height) rsv.width * 1.0f / rsv.height
-            else rsv.height * 1.0f / rsv.width
-            val previewAsp = previewSize.height * 1.0f / previewSize.width
-            val screenToPreviewAsp = if (screenAsp < previewAsp) screenAsp / previewAsp
-            else previewAsp / screenAsp
-            val w =
-                min(rsv.width, rsv.height) / min(previewSize.width, previewSize.height).toFloat()
-            val h =
-                max(rsv.width, rsv.height) / max(previewSize.width, previewSize.height).toFloat()
-            renderer.transformWidth = screenToPreviewAsp
-            renderer.transformHeight = h * (screenToPreviewAsp / w)
-
-            cameraManager.openCamera(cameraId, cameraStateCallback, backgroundHandler)
-        } catch (e: CameraAccessException) {
-            Toast.makeText(this, "Cannot access the camera.", Toast.LENGTH_SHORT).show()
-            finish()
-        } catch (e: NullPointerException) {
-            // Currently an NPE is thrown when the Camera2API is used but not supported on the device this code runs.
-            Toast.makeText(this, "Camera2API is not supported.", Toast.LENGTH_SHORT).show()
-            finish()
-        } catch (e: InterruptedException) {
-            throw RuntimeException("Interrupted while trying to lock camera opening.")
+    private fun openCamera() = try {
+        if (!cameraOpenCloseLock.tryAcquire(2500, TimeUnit.MILLISECONDS)) {
+            throw RuntimeException("Time out waiting to lock camera opening.")
         }
+
+        val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        val cameraId = cameraManager.cameraIdList.first {
+            cameraManager.getCameraCharacteristics(it)
+                .get(CameraCharacteristics.LENS_FACING) == cameraFacing
+        }
+        val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+        sensorOrientation = characteristics[CameraCharacteristics.SENSOR_ORIENTATION] ?: 0
+        val configurationMap =
+            characteristics[CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP]
+                ?: throw RuntimeException("Cannot get available preview/video sizes")
+        val previewSize = /*Size(1920, 1080)*/ choosePreviewSize(
+            configurationMap.getOutputSizes(SurfaceTexture::class.java),
+            rsv.width,
+            rsv.height
+        )
+        renderer.setupCameraSurfaceTexture(previewSize.width, previewSize.height)
+        renderer.cameraSurfaceTexture?.setOnFrameAvailableListener(rsv.renderHandler)
+
+        val screenAsp = if (rsv.width < rsv.height) rsv.width * 1.0f / rsv.height
+        else rsv.height * 1.0f / rsv.width
+        val previewAsp = previewSize.height * 1.0f / previewSize.width
+        val screenToPreviewAsp = if (screenAsp < previewAsp) screenAsp / previewAsp
+        else previewAsp / screenAsp
+        val w =
+            min(rsv.width, rsv.height) / min(previewSize.width, previewSize.height).toFloat()
+        val h =
+            max(rsv.width, rsv.height) / max(previewSize.width, previewSize.height).toFloat()
+        renderer.transformWidth = screenToPreviewAsp
+        renderer.transformHeight = h * (screenToPreviewAsp / w)
+
+        cameraManager.openCamera(cameraId, cameraStateCallback, backgroundHandler)
+    } catch (e: CameraAccessException) {
+        Toast.makeText(this, "Cannot access the camera.", Toast.LENGTH_SHORT).show()
+        finish()
+    } catch (e: NullPointerException) {
+        // Currently an NPE is thrown when the Camera2API is used but not supported on the device this code runs.
+        Toast.makeText(this, "Camera2API is not supported.", Toast.LENGTH_SHORT).show()
+        finish()
+    } catch (e: InterruptedException) {
+        throw RuntimeException("Interrupted while trying to lock camera opening.")
     }
 
     private fun closeCamera() {
@@ -405,33 +396,10 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
         }
     }
 
-    private fun checkAndRequestPermissions(): Boolean =
-        if (!hasPermissions) {
-            requestPermissions(PERMISSIONS, REQUEST_CODE_PERMISSIONS)
-            false
-        } else {
-            true
-        }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (!(requestCode == REQUEST_CODE_PERMISSIONS && grantResults.size > 1 &&
-                    grantResults[0] == PackageManager.PERMISSION_GRANTED &&
-                    grantResults[1] == PackageManager.PERMISSION_GRANTED)
-        ) finish()
-    }
-
     override fun onRendererFinished() = Unit
 
     private companion object {
         val TAG: String = GlCameraActivity::class.java.simpleName
-
-        val PERMISSIONS = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
-        const val REQUEST_CODE_PERMISSIONS = 0xCA
 
         const val SENSOR_ORIENTATION_DEFAULT_DEGREES = 90
         const val SENSOR_ORIENTATION_INVERSE_DEGREES = 270
