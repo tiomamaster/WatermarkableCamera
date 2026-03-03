@@ -15,6 +15,7 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.os.Message
 import android.util.AttributeSet
+import android.util.Log
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -29,10 +30,8 @@ class KRecordableSurfaceView @JvmOverloads constructor(
 
     lateinit var renderer: Renderer
 
-    val renderHandler by lazy {
-        val renderThread = HandlerThread("RenderThread").apply { start() }
-        RenderHandler(renderThread.looper)
-    }
+    private var renderThread: HandlerThread? = null
+    var renderHandler: RenderHandler? = null
 
     private val mediaSurface = MediaCodec.createPersistentInputSurface()
     private lateinit var mediaRecorder: MediaRecorder
@@ -42,8 +41,23 @@ class KRecordableSurfaceView @JvmOverloads constructor(
     private var desiredWidth = 0
     private var desiredHeight = 0
 
-    init {
+    fun resume() {
+        renderThread = HandlerThread("RenderThread").apply { start() }
+        renderHandler = RenderHandler(renderThread!!.looper)
         holder.addCallback(renderHandler)
+    }
+
+    fun pause() {
+        holder.removeCallback(renderHandler)
+        renderHandler?.destroyEGL()
+        renderThread?.quitSafely()
+        try {
+            renderThread?.join()
+            renderThread = null
+            renderHandler = null
+        } catch (e: InterruptedException) {
+            Log.e(TAG, e.toString())
+        }
     }
 
     fun initRecorder(saveTo: File, desiredWidth: Int, desiredHeight: Int, orientationHint: Int) {
@@ -174,6 +188,25 @@ class KRecordableSurfaceView @JvmOverloads constructor(
             renderer.onContextCreated()
         }
 
+        fun destroyEGL() {
+            sendMessage(obtainMessage(MSG_DESTROY_RESOURCES))
+        }
+
+        private fun destroyEGLIml() {
+            renderer.onSurfaceDestroyed()
+            EGL14.eglMakeCurrent(
+                eglDisplay,
+                EGL14.EGL_NO_SURFACE,
+                EGL14.EGL_NO_SURFACE,
+                EGL14.EGL_NO_CONTEXT
+            )
+            EGL14.eglDestroySurface(eglDisplay, eglSurface)
+            EGL14.eglDestroySurface(eglDisplay, eglSurfaceMedia)
+            EGL14.eglDestroyContext(eglDisplay, eglContext)
+            EGL14.eglReleaseThread()
+            EGL14.eglTerminate(eglDisplay)
+        }
+
         private fun onFrameAvailableImpl(surfaceTexture: SurfaceTexture) {
             if (eglContext == EGL14.EGL_NO_CONTEXT) return
 
@@ -192,6 +225,7 @@ class KRecordableSurfaceView @JvmOverloads constructor(
         }
 
         override fun onFrameAvailable(surfaceTexture: SurfaceTexture?) {
+            if (surfaceTexture?.isReleased == true) return
             sendMessage(obtainMessage(MSG_ON_FRAME_AVAILABLE, 0, 0, surfaceTexture))
         }
 
@@ -206,7 +240,7 @@ class KRecordableSurfaceView @JvmOverloads constructor(
         override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
             this@KRecordableSurfaceView.width = width
             this@KRecordableSurfaceView.height = height
-            sendMessage(obtainMessage(MSG_SURFACE_CHANGED, 0, 0, null))
+            sendMessage(obtainMessage(MSG_SURFACE_CHANGED))
         }
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -220,15 +254,18 @@ class KRecordableSurfaceView @JvmOverloads constructor(
         override fun handleMessage(msg: Message) {
             when (msg.what) {
                 MSG_CREATE_RESOURCES -> createResources(msg.obj as Surface)
+                MSG_DESTROY_RESOURCES -> destroyEGLIml()
                 MSG_SURFACE_CHANGED -> surfaceChangedImpl()
                 MSG_ON_FRAME_AVAILABLE -> onFrameAvailableImpl(msg.obj as SurfaceTexture)
             }
         }
     }
 
-    companion object {
-        private const val MSG_CREATE_RESOURCES = 0
-        private const val MSG_SURFACE_CHANGED = 1
-        private const val MSG_ON_FRAME_AVAILABLE = 2
+    private companion object {
+        val TAG: String = KRecordableSurfaceView::class.java.simpleName
+        const val MSG_CREATE_RESOURCES = 0
+        const val MSG_DESTROY_RESOURCES = 1
+        const val MSG_SURFACE_CHANGED = 2
+        const val MSG_ON_FRAME_AVAILABLE = 3
     }
 }

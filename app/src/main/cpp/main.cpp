@@ -171,7 +171,7 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM* _Nonnull vm, void* _Nullable) {
     }
 
     jclass c = env->FindClass(
-        "com/gmail/tiomamaster/watermarkablecamera/VulkanActivity"
+        "com/gmail/tiomamaster/watermarkablecamera/VkCameraActivity"
     );
     if (c == nullptr) return JNI_ERR;
 

@@ -47,7 +47,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
-class CameraActivity : AppCompatActivity(), Renderer.StateListener {
+class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
 
     private lateinit var renderer: Renderer
 
@@ -127,14 +127,8 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     private val videoFilePath: String
         get() {
             val filename = "${System.currentTimeMillis()}.mp4"
-            val dir = /*getExternalFilesDir(null)*/"/sdcard/DCIM/Camera"
+            val dir = "/sdcard/DCIM/Camera"
             return "$dir/$filename"
-
-//            return if (dir == null) {
-//                filename
-//            } else {
-//                "${dir.absolutePath}/$filename"
-//            }
         }
 
     private val hasPermissions: Boolean
@@ -173,7 +167,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     override fun onResume() {
         super.onResume()
         startBackgroundThread()
-//        rsv.resume()
+        rsv.resume()
         orientationEventListener.enable()
     }
 
@@ -181,8 +175,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
         super.onPause()
         closeCamera()
         stopBackgroundThread()
-        renderer.releaseSurfaceTextures()
-//        rsv.pause()
+        rsv.pause()
         orientationEventListener.disable()
     }
 
@@ -336,11 +329,11 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
             btn.text = "Start"
             recording = false
         } else {
-            val orientationHint = when (sensorOrientation) {
-                SENSOR_ORIENTATION_DEFAULT_DEGREES -> screenRotation
-                SENSOR_ORIENTATION_INVERSE_DEGREES -> sensorOrientation - screenRotation
-                else -> 0
-            }
+//            val orientationHint = when (sensorOrientation) {
+//                SENSOR_ORIENTATION_DEFAULT_DEGREES -> screenRotation
+//                SENSOR_ORIENTATION_INVERSE_DEGREES -> sensorOrientation - screenRotation
+//                else -> 0
+//            }
             try {
                 val (videoWidth, videoHeight) = if (rsv.width < rsv.height) WIDTH to HEIGHT
                 else HEIGHT to WIDTH
@@ -348,7 +341,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
                     File(videoFilePath),
                     videoWidth,
                     videoHeight,
-                    orientationHint
+                    screenRotation
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Couldn't re-init recording", e)
@@ -435,8 +428,7 @@ class CameraActivity : AppCompatActivity(), Renderer.StateListener {
     override fun onRendererFinished() = Unit
 
     private companion object {
-
-        val TAG: String = CameraActivity::class.java.simpleName
+        val TAG: String = GlCameraActivity::class.java.simpleName
 
         val PERMISSIONS = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
         const val REQUEST_CODE_PERMISSIONS = 0xCA

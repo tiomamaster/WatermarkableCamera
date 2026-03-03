@@ -26,7 +26,7 @@ import java.io.File
 import kotlin.math.roundToInt
 import kotlin.system.exitProcess
 
-class VulkanActivity : GameActivity() {
+class VkCameraActivity : GameActivity() {
 
     private lateinit var watermark: WatermarkView
     private lateinit var watermarkText: AppCompatTextView
@@ -241,7 +241,7 @@ class VulkanActivity : GameActivity() {
             System.loadLibrary("WatermarkableCameraJNI")
         }
 
-        val TAG: String = VulkanActivity::class.java.simpleName
+        val TAG: String = VkCameraActivity::class.java.simpleName
 
         const val WIDTH = 720
         const val HEIGHT = 1280

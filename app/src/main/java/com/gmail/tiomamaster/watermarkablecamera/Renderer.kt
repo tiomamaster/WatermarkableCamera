@@ -26,7 +26,6 @@ class Renderer(private val context: Context, listener: StateListener) {
     private val cameraTransformMatrix = FloatArray(16)
 
     var watermarkSurfaceTexture: SurfaceTexture? = null
-    private var watFrameAvailableRegistered = false
     private var needUpdateWatermarkTexture = false
     private val watermarkTransformMatrix = FloatArray(16)
 
@@ -58,11 +57,11 @@ class Renderer(private val context: Context, listener: StateListener) {
         }
     }
 
-    fun releaseSurfaceTextures() {
+    private fun releaseSurfaceTextures() {
         releaseCameraSurfaceTexture()
+        watermarkSurfaceTexture?.setOnFrameAvailableListener(null)
         watermarkSurfaceTexture?.release()
         watermarkSurfaceTexture = null
-        watFrameAvailableRegistered = false
     }
 
     fun releaseCameraSurfaceTexture() {
@@ -140,6 +139,7 @@ class Renderer(private val context: Context, listener: StateListener) {
     }
 
     private fun cleanupGlComponents() {
+        releaseSurfaceTextures()
         withGlErrorChecking("Delete textures") {
             gl2.glDeleteTextures(
                 textureIds.size,
