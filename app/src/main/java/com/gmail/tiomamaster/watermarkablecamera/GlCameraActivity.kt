@@ -129,6 +129,8 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
             return "$dir/$filename"
         }
 
+    private var resolution = Resolution.FHD
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_camera)
@@ -149,10 +151,12 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
         // adjust video's preview size to make it aspect ratio equal to recorded video
         val height = resources.displayMetrics.heightPixels
         val width = resources.displayMetrics.widthPixels
+        resolution = Resolution.entries[intent.getIntExtra(MainActivity.EXTRA_RESOLUTION, 1)]
+        val asp = resolution.size.width / resolution.size.height.toFloat()
         if (height > width) {
-            rsv.layoutParams.height = (width * ASP).roundToInt()
+            rsv.layoutParams.height = (width * asp).roundToInt()
         } else {
-            rsv.layoutParams.width = (height * ASP).roundToInt()
+            rsv.layoutParams.width = (height * asp).roundToInt()
         }
 
         renderer = Renderer(applicationContext, this)
@@ -232,10 +236,10 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
         val configurationMap =
             characteristics[CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP]
                 ?: throw RuntimeException("Cannot get available preview/video sizes")
-        val previewSize = /*Size(1920, 1080)*/ choosePreviewSize(
+        val previewSize = choosePreviewSize(
             configurationMap.getOutputSizes(SurfaceTexture::class.java),
-            rsv.width,
-            rsv.height
+            resolution.size.width,
+            resolution.size.height
         )
         renderer.setupCameraSurfaceTexture(previewSize.width, previewSize.height)
         renderer.cameraSurfaceTexture?.setOnFrameAvailableListener(rsv.renderHandler)
@@ -326,8 +330,9 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
 //                else -> 0
 //            }
             try {
-                val (videoWidth, videoHeight) = if (rsv.width < rsv.height) WIDTH to HEIGHT
-                else HEIGHT to WIDTH
+                val (videoWidth, videoHeight) =
+                    if (rsv.width < rsv.height) resolution.size.height to resolution.size.width
+                    else resolution.size.width to resolution.size.height
                 rsv.initRecorder(
                     File(videoFilePath),
                     videoWidth,
@@ -381,7 +386,7 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
     ): Size {
         // Collect the supported resolutions that are at least as big as the preview Surface
         val bigEnough = choices.filter {
-            it.height == it.width * height / width && it.width >= width && it.height >= height
+            it.width >= width && it.height >= height
         }
 
         // Pick the smallest of those, assuming we found any
@@ -403,9 +408,5 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
 
         const val SENSOR_ORIENTATION_DEFAULT_DEGREES = 90
         const val SENSOR_ORIENTATION_INVERSE_DEGREES = 270
-
-        const val WIDTH = 720
-        const val HEIGHT = 1280
-        const val ASP = HEIGHT / WIDTH.toFloat()
     }
 }
