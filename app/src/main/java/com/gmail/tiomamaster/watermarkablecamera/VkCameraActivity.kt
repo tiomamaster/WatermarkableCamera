@@ -14,13 +14,11 @@ import android.view.KeyEvent
 import android.view.Surface
 import android.view.View
 import android.view.WindowManager.LayoutParams
-import android.widget.FrameLayout
-import androidx.appcompat.widget.AppCompatImageView
-import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.google.android.material.button.MaterialButton
+import com.gmail.tiomamaster.watermarkablecamera.databinding.ActivityCameraVkBinding
+import com.gmail.tiomamaster.watermarkablecamera.databinding.WatermarkBinding
 import com.google.androidgamesdk.GameActivity
 import java.io.File
 import kotlin.math.roundToInt
@@ -28,9 +26,8 @@ import kotlin.system.exitProcess
 
 class VkCameraActivity : GameActivity() {
 
-    private lateinit var watermark: WatermarkView
-    private lateinit var watermarkText: AppCompatTextView
-    private lateinit var watermarkImage: AppCompatImageView
+    private lateinit var binding: ActivityCameraVkBinding
+    private lateinit var watBinding: WatermarkBinding
 
     private val mediaSurface = MediaCodec.createPersistentInputSurface()
     private lateinit var mediaRecorder: MediaRecorder
@@ -60,10 +57,8 @@ class VkCameraActivity : GameActivity() {
 
     @SuppressLint("InflateParams", "Recycle")
     private fun setupWatermark() {
-        watermark = layoutInflater.inflate(R.layout.watermark, null) as WatermarkView
-        watermarkText = watermark.findViewById(R.id.text)
-        watermarkImage = watermark.findViewById(R.id.img)
-        with(watermark) {
+        watBinding = WatermarkBinding.inflate(layoutInflater)
+        with(watBinding.root) {
 //            val width = resources.displayMetrics.widthPixels
 //            val height = resources.displayMetrics.heightPixels
             val width = mSurfaceView.width
@@ -182,12 +177,11 @@ class VkCameraActivity : GameActivity() {
     override fun onCreateSurfaceView() {
         mSurfaceView = createSurfaceView() ?: return
 
-        setContentView(R.layout.activity_vulkan)
-        val frameLayout: FrameLayout = findViewById(R.id.frameLayout)
-        frameLayout.addView(mSurfaceView)
+        binding = ActivityCameraVkBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        binding.frameLayout.addView(mSurfaceView)
 
-        val btnStartStop = findViewById<MaterialButton>(R.id.btnStartStop)
-        btnStartStop.setOnClickListener {
+        binding.btnStartStop.setOnClickListener {
             if (recording) stopRecording() else startRecording()
         }
 
@@ -195,9 +189,9 @@ class VkCameraActivity : GameActivity() {
         val height = resources.displayMetrics.heightPixels
         val width = resources.displayMetrics.widthPixels
         if (height > width) {
-            frameLayout.layoutParams.height = (width * ASP).roundToInt()
+            binding.frameLayout.layoutParams.height = (width * ASP).roundToInt()
         } else {
-            frameLayout.layoutParams.width = (height * ASP).roundToInt()
+            binding.frameLayout.layoutParams.width = (height * ASP).roundToInt()
         }
 
         // Register as a callback for the rendering of the surface, so that we can pass this

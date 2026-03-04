@@ -25,11 +25,11 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.AppCompatImageView
-import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.gmail.tiomamaster.watermarkablecamera.databinding.ActivityCameraGlBinding
+import com.gmail.tiomamaster.watermarkablecamera.databinding.WatermarkBinding
 import com.google.android.material.button.MaterialButton
 import java.io.File
 import java.lang.Long.signum
@@ -47,18 +47,15 @@ import kotlin.random.Random
 
 class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
 
+    private lateinit var binding: ActivityCameraGlBinding
+    private lateinit var watBinding: WatermarkBinding
+
     private lateinit var renderer: Renderer
 
-    private lateinit var watermark: WatermarkView
-    private lateinit var watermarkText: AppCompatTextView
-    private lateinit var watermarkImage: AppCompatImageView
-    private lateinit var rsv: KRecordableSurfaceView
-    private lateinit var btnStartStop: MaterialButton
-    private lateinit var btnChangeCamera: MaterialButton
     private lateinit var timer: Timer
     private var recording = false
-    private var cameraFacing = CameraCharacteristics.LENS_FACING_BACK
 
+    private var cameraFacing = CameraCharacteristics.LENS_FACING_BACK
     private val cameraOpenCloseLock = Semaphore(1)
 
     private var backgroundThread: HandlerThread? = null
@@ -115,8 +112,8 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
             captureRequestBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(30, 30))
             session.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler)
 
-            btnStartStop.setOnClickListener(::startStopRecording)
-            btnChangeCamera.setOnClickListener(::changeCamera)
+            binding.btnStartStop.setOnClickListener(::startStopRecording)
+            binding.btnChangeCamera.setOnClickListener(::changeCamera)
         }
 
         override fun onConfigureFailed(session: CameraCaptureSession) = Unit
@@ -133,17 +130,15 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_camera)
-        rsv = findViewById(R.id.rsv)
-        btnStartStop = findViewById(R.id.btnStartStop)
-        btnChangeCamera = findViewById(R.id.btnChangeCamera)
+        binding = ActivityCameraGlBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, rsv).apply {
+        WindowInsetsControllerCompat(window, binding.rsv).apply {
             hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
@@ -154,19 +149,19 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
         resolution = Resolution.entries[intent.getIntExtra(MainActivity.EXTRA_RESOLUTION, 1)]
         val asp = resolution.size.width / resolution.size.height.toFloat()
         if (height > width) {
-            rsv.layoutParams.height = (width * asp).roundToInt()
+            binding.rsv.layoutParams.height = (width * asp).roundToInt()
         } else {
-            rsv.layoutParams.width = (height * asp).roundToInt()
+            binding.rsv.layoutParams.width = (height * asp).roundToInt()
         }
 
         renderer = Renderer(applicationContext, this)
-        rsv.renderer = renderer
+        binding.rsv.renderer = renderer
     }
 
     override fun onResume() {
         super.onResume()
         startBackgroundThread()
-        rsv.resume()
+        binding.rsv.resume()
         orientationEventListener.enable()
     }
 
@@ -174,7 +169,7 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
         super.onPause()
         closeCamera()
         stopBackgroundThread()
-        rsv.pause()
+        binding.rsv.pause()
         orientationEventListener.disable()
     }
 
@@ -204,16 +199,14 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
 
     @SuppressLint("InflateParams", "Recycle")
     private fun setupWatermark() {
-        renderer.setupWatermarkSurfaceTexture(rsv.width, rsv.height)
-        watermark = layoutInflater.inflate(R.layout.watermark, null) as WatermarkView
-        watermarkText = watermark.findViewById(R.id.text)
-        watermarkImage = watermark.findViewById(R.id.img)
-        with(watermark) {
+        renderer.setupWatermarkSurfaceTexture(binding.rsv.width, binding.rsv.height)
+        watBinding = WatermarkBinding.inflate(layoutInflater)
+        with(watBinding.root) {
             surface = Surface(renderer.watermarkSurfaceTexture)
             val widthMeasureSpec =
-                View.MeasureSpec.makeMeasureSpec(rsv.width, View.MeasureSpec.EXACTLY)
+                View.MeasureSpec.makeMeasureSpec(binding.rsv.width, View.MeasureSpec.EXACTLY)
             val heightMeasureSpec =
-                View.MeasureSpec.makeMeasureSpec(rsv.height, View.MeasureSpec.EXACTLY)
+                View.MeasureSpec.makeMeasureSpec(binding.rsv.height, View.MeasureSpec.EXACTLY)
             this.widthMeasureSpec = widthMeasureSpec
             this.heightMeasureSpec = heightMeasureSpec
             update()
@@ -242,17 +235,16 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
             resolution.size.height
         )
         renderer.setupCameraSurfaceTexture(previewSize.width, previewSize.height)
-        renderer.cameraSurfaceTexture?.setOnFrameAvailableListener(rsv.renderHandler)
+        renderer.cameraSurfaceTexture?.setOnFrameAvailableListener(binding.rsv.renderHandler)
 
-        val screenAsp = if (rsv.width < rsv.height) rsv.width * 1.0f / rsv.height
-        else rsv.height * 1.0f / rsv.width
+        val rsvW = binding.rsv.width
+        val rsvH = binding.rsv.height
+        val screenAsp = if (rsvW < rsvH) rsvW * 1.0f / rsvH else rsvH * 1.0f / rsvW
         val previewAsp = previewSize.height * 1.0f / previewSize.width
         val screenToPreviewAsp = if (screenAsp < previewAsp) screenAsp / previewAsp
         else previewAsp / screenAsp
-        val w =
-            min(rsv.width, rsv.height) / min(previewSize.width, previewSize.height).toFloat()
-        val h =
-            max(rsv.width, rsv.height) / max(previewSize.width, previewSize.height).toFloat()
+        val w = min(rsvW, rsvH) / min(previewSize.width, previewSize.height).toFloat()
+        val h = max(rsvW, rsvH) / max(previewSize.width, previewSize.height).toFloat()
         renderer.transformWidth = screenToPreviewAsp
         renderer.transformHeight = h * (screenToPreviewAsp / w)
 
@@ -319,7 +311,7 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
     @SuppressLint("SetTextI18n")
     private fun startStopRecording(v: View) {
         val btn = v as MaterialButton
-        if (recording && rsv.stopRecording()) {
+        if (recording && binding.rsv.stopRecording()) {
             stopTimer()
             btn.text = "Start"
             recording = false
@@ -331,9 +323,9 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
 //            }
             try {
                 val (videoWidth, videoHeight) =
-                    if (rsv.width < rsv.height) resolution.size.height to resolution.size.width
+                    if (binding.rsv.width < binding.rsv.height) resolution.size.height to resolution.size.width
                     else resolution.size.width to resolution.size.height
-                rsv.initRecorder(
+                binding.rsv.initRecorder(
                     File(videoFilePath),
                     videoWidth,
                     videoHeight,
@@ -342,7 +334,7 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
             } catch (e: Exception) {
                 Log.e(TAG, "Couldn't re-init recording", e)
             }
-            if (rsv.startRecording()) {
+            if (binding.rsv.startRecording()) {
                 startTimer()
                 btn.text = "Stop"
                 recording = true
@@ -353,11 +345,13 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
     private fun startTimer() {
         var i = 0
         timer = fixedRateTimer(period = 1000) {
-            watermarkText.text = "${++i}"
-            // TODO: animate it
-            watermarkImage.x = Random.nextDouble(0.0, watermark.width.toDouble()).toFloat()
-            watermarkImage.y = Random.nextDouble(0.0, watermark.height.toDouble()).toFloat()
-            watermark.update()
+            with(watBinding) {
+                txt.text = "${++i}"
+                // TODO: animate it
+                img.x = Random.nextDouble(0.0, root.width.toDouble()).toFloat()
+                img.y = Random.nextDouble(0.0, root.height.toDouble()).toFloat()
+                root.update()
+            }
         }
     }
 
@@ -367,10 +361,10 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
     private fun changeCamera(v: View) {
         v as MaterialButton
         cameraFacing = if (cameraFacing == CameraCharacteristics.LENS_FACING_BACK) {
-            btnChangeCamera.text = "back"
+            binding.btnChangeCamera.text = "back"
             CameraCharacteristics.LENS_FACING_FRONT
         } else {
-            btnChangeCamera.text = "front"
+            binding.btnChangeCamera.text = "front"
             CameraCharacteristics.LENS_FACING_BACK
         }
         renderer.releaseCameraSurfaceTexture()
