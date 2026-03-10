@@ -225,7 +225,6 @@ class VkCameraActivity : GameActivity() {
         exitProcess(0)
     }
 
-    private external fun test(hwBuff: HardwareBuffer)
     private external fun getWatermarkSurface(): Surface
     private external fun setMediaSurface(surface: Surface)
     private external fun nativeStartStopRecording()

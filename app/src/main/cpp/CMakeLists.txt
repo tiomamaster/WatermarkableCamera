@@ -28,7 +28,7 @@ cpmaddpackage(NAME stb URL
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic")
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic -Wshadow -Wnon-virtual-dtor")
 
 add_definitions(-DVK_USE_PLATFORM_ANDROID_KHR=1)
 
@@ -56,8 +56,7 @@ endfunction()
 
 add_library(
   ${PROJECT_NAME} SHARED
-  # camera_main.cpp
-  main.cpp camera_utils.cpp image_reader.cpp camera_engine.cpp
+  main.cpp CameraUtils.cpp image_reader.cpp camera_engine.cpp
   camera_manager.cpp camera_listeners.cpp)
 
 # add lib dependencies

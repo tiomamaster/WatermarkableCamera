@@ -2,9 +2,11 @@
 
 #include <thread>
 
+#include "CameraUtils.hpp"
+#include "Util.hpp"
 #include "camera_manager.hpp"
-#include "camera_utils.hpp"
-#include "native_debug.hpp"
+
+using namespace camera::util;
 
 /*
  * Camera Manager Listener object
@@ -80,7 +82,7 @@ void NDKCamera::OnDeviceError(ACameraDevice* dev, int err) {
     std::string id(ACameraDevice_getId(dev));
 
     LOGI("CameraDevice %s is in error %#x", id.c_str(), err);
-    PrintCameraDeviceError(err);
+    printCameraDeviceError(err);
 
     CameraId& cam = cameras_[id];
 

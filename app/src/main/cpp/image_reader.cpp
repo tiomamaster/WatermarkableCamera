@@ -8,7 +8,7 @@
 #include <string>
 #include <thread>
 
-#include "native_debug.hpp"
+#include "Util.hpp"
 
 /*
  * For JPEG capture, captured files are saved under

@@ -27,12 +27,6 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
     switch (cmd) {
         case APP_CMD_START:
             LOGI("Called - APP_CMD_START");
-            //            if (appState->androidApp->window != nullptr) {
-            //                appState->vkApp->reset(app->window,
-            //                app->activity->assetManager);
-            //                appState->vkApp->initVulkan();
-            //                appState->canRender = true;
-            //            }
             break;
         case APP_CMD_INIT_WINDOW:
             // The window is being shown, get it ready.
@@ -120,8 +114,7 @@ void drawFrame(AImage* image, bool isCam) {
         while (
             ALooper_pollOnce(
                 appState.canRender ? 0 : -1, nullptr, &events, (void**)&source
-            ) >= 0
-        ) {
+            ) >= 0) {
             if (source != nullptr) {
                 source->process(app, source);
             }
@@ -130,22 +123,6 @@ void drawFrame(AImage* image, bool isCam) {
         drawFrame(camEngine.getNextCamImage(), true);
         drawFrame(camEngine.getNextWatImage(), false);
     }
-}
-
-void test(JNIEnv* env, jobject a, jobject hardwareBufferObj) {
-    LOGI("test called from jvm side");
-    AHardwareBuffer* hwBuffer =
-        AHardwareBuffer_fromHardwareBuffer(env, hardwareBufferObj);
-    LOGI(
-        "AHardwareBuffer from HardwareBuffer success = %s",
-        hwBuffer != nullptr ? "true" : "false"
-    );
-    AHardwareBuffer_acquire(hwBuffer);
-    LOGI("Buffer %p acquired by vk renderer", hwBuffer);
-
-    vkApp.watHwBufferToTexture(hwBuffer);
-
-    AHardwareBuffer_release(hwBuffer);
 }
 
 jobject getWatermarkSurface(JNIEnv* env, jobject) {
@@ -176,9 +153,6 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM* _Nonnull vm, void* _Nullable) {
     if (c == nullptr) return JNI_ERR;
 
     static const JNINativeMethod methods[] = {
-        {"test",
-         "(Landroid/hardware/HardwareBuffer;)V",
-         reinterpret_cast<void*>(test)},
         {"getWatermarkSurface",
          "()Landroid/view/Surface;",
          reinterpret_cast<jobject*>(getWatermarkSurface)},
@@ -189,7 +163,7 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM* _Nonnull vm, void* _Nullable) {
          "()V",
          reinterpret_cast<void*>(nativeStartStopRecording)}
     };
-    int rc = env->RegisterNatives(c, methods, 4);
+    int rc = env->RegisterNatives(c, methods, 3);
     if (rc != JNI_OK) return rc;
 
     return JNI_VERSION_1_6;

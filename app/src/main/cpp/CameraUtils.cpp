@@ -1,4 +1,4 @@
-#include "camera_utils.hpp"
+#include "CameraUtils.hpp"
 
 #include <camera/NdkCameraManager.h>
 #include <media/NdkImage.h>
@@ -8,12 +8,15 @@
 #include <utility>
 #include <vector>
 
-#include "native_debug.hpp"
+#include "Util.hpp"
 
 #define UKNOWN_TAG "UNKNOW_TAG"
 #define MAKE_PAIR(val) std::make_pair(val, #val)
+
+namespace camera::util {
+
 template <typename T>
-const char* GetPairStr(T key, std::vector<std::pair<T, const char*>>& store) {
+const char* getPairStr(T key, std::vector<std::pair<T, const char*>>& store) {
     typedef typename std::vector<std::pair<T, const char*>>::iterator iterator;
     for (iterator it = store.begin(); it != store.end(); ++it) {
         if (it->first == key) {
@@ -24,9 +27,7 @@ const char* GetPairStr(T key, std::vector<std::pair<T, const char*>>& store) {
     return UKNOWN_TAG;
 }
 
-/*
- * camera_status_t error translation
- */
+// camera_status_t error translation
 using ERROR_PAIR = std::pair<camera_status_t, const char*>;
 static std::vector<ERROR_PAIR> errorInfo{
     MAKE_PAIR(ACAMERA_OK),
@@ -45,14 +46,13 @@ static std::vector<ERROR_PAIR> errorInfo{
     MAKE_PAIR(ACAMERA_ERROR_CAMERA_DISABLED),
     MAKE_PAIR(ACAMERA_ERROR_PERMISSION_DENIED),
 };
-const char* GetErrorStr(camera_status_t err) {
-    return GetPairStr<camera_status_t>(err, errorInfo);
+
+const char* getErrorStr(camera_status_t err) {
+    return getPairStr<camera_status_t>(err, errorInfo);
 }
 
-/*
- * camera_metadata_tag_t translation. Useful to look at available tags
- * on the underneath platform
- */
+// camera_metadata_tag_t translation. Useful to look at available tags
+// on the underneath platform
 using TAG_PAIR = std::pair<acamera_metadata_tag_t, const char*>;
 static std::vector<TAG_PAIR> tagInfo{
     MAKE_PAIR(ACAMERA_COLOR_CORRECTION_MODE),
@@ -251,8 +251,9 @@ static std::vector<TAG_PAIR> tagInfo{
     MAKE_PAIR(ACAMERA_DEPTH_DEPTH_IS_EXCLUSIVE),
     MAKE_PAIR(ACAMERA_DEPTH_END),
 };
-const char* GetTagStr(acamera_metadata_tag_t tag) {
-    return GetPairStr<acamera_metadata_tag_t>(tag, tagInfo);
+
+const char* getTagStr(acamera_metadata_tag_t tag) {
+    return getPairStr<acamera_metadata_tag_t>(tag, tagInfo);
 }
 
 using FORMAT_PAIR = std::pair<int, const char*>;
@@ -267,24 +268,25 @@ static std::vector<FORMAT_PAIR> formatInfo{
     MAKE_PAIR(AIMAGE_FORMAT_DEPTH_POINT_CLOUD),
     MAKE_PAIR(AIMAGE_FORMAT_PRIVATE),
 };
-const char* GetFormatStr(int fmt) { return GetPairStr<int>(fmt, formatInfo); }
 
-void PrintMetadataTags(int32_t entries, const uint32_t* pTags) {
+const char* getFormatStr(int fmt) { return getPairStr<int>(fmt, formatInfo); }
+
+void printMetadataTags(int32_t entries, const uint32_t* pTags) {
     LOGI("MetadataTag (start):");
     for (int32_t idx = 0; idx < entries; ++idx) {
         const char* name =
-            GetTagStr(static_cast<acamera_metadata_tag_t>(pTags[idx]));
+            getTagStr(static_cast<acamera_metadata_tag_t>(pTags[idx]));
         LOGI("(%#08x) : %s", pTags[idx], name);
     }
     LOGI("MetadataTag (end)");
 }
 
-void PrintLensFacing(ACameraMetadata_const_entry& lens) {
+void printLensFacing(ACameraMetadata_const_entry& lens) {
     ASSERT(
         lens.tag == ACAMERA_LENS_FACING,
         "Wrong tag(%#x) of %s to %s",
         lens.tag,
-        GetTagStr((acamera_metadata_tag_t)lens.tag),
+        getTagStr((acamera_metadata_tag_t)lens.tag),
         __FUNCTION__
     );
     LOGI(
@@ -296,15 +298,13 @@ void PrintLensFacing(ACameraMetadata_const_entry& lens) {
     );
 }
 
-/*
- * Stream_Configuration is in format of:
- *    format, width, height, input?
- *    ACAMERA_TYPE_INT32 type
- */
-void PrintStreamConfigurations(ACameraMetadata_const_entry& val) {
-#define MODE_LABLE "ModeInfo:"
+// Stream_Configuration is in format of:
+//    format, width, height, input?
+//    ACAMERA_TYPE_INT32 type
+void printStreamConfigurations(ACameraMetadata_const_entry& val) {
+#define MODE_LABEL "ModeInfo:"
     const char* tagName =
-        GetTagStr(static_cast<acamera_metadata_tag_t>(val.tag));
+        getTagStr(static_cast<acamera_metadata_tag_t>(val.tag));
     ASSERT(
         !(val.count & 0x3),
         "STREAM_CONFIGURATION (%d) should multiple of 4",
@@ -315,24 +315,25 @@ void PrintStreamConfigurations(ACameraMetadata_const_entry& val) {
         "STREAM_CONFIGURATION TYPE(%d) is not ACAMERA_TYPE_INT32(1)",
         val.type
     );
-    LOGI("%s -- %s:", tagName, MODE_LABLE);
+    LOGI("%s -- %s:", tagName, MODE_LABEL);
     for (uint32_t i = 0; i < val.count; i += 4) {
         LOGI(
             "%s: %08d x %08d  %s",
-            GetFormatStr(val.data.i32[i]),
+            getFormatStr(val.data.i32[i]),
             val.data.i32[i + 1],
             val.data.i32[i + 2],
             val.data.i32[i + 3] ? "INPUT" : "OUTPUT"
         );
     }
-#undef MODE_LABLE
+#undef MODE_LABEL
 }
-void PrintTagVal(const char* printLabel, ACameraMetadata_const_entry& val) {
+
+void printTagVal(const char* printLabel, ACameraMetadata_const_entry& val) {
     if (val.tag == ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS) {
-        PrintStreamConfigurations(val);
+        printStreamConfigurations(val);
         return;
     }
-    const char* name = GetTagStr(static_cast<acamera_metadata_tag_t>(val.tag));
+    const char* name = getTagStr(static_cast<acamera_metadata_tag_t>(val.tag));
     for (uint32_t i = 0; i < val.count; ++i) {
         switch (val.type) {
             case ACAMERA_TYPE_INT32:
@@ -370,16 +371,13 @@ void PrintTagVal(const char* printLabel, ACameraMetadata_const_entry& val) {
     }
 }
 
-/*
- * PrintCamera():
- *   Enumerate existing camera and its metadata.
- */
-void PrintCameras(ACameraManager* cmrMgr) {
+// Enumerate existing camera and its metadata
+void printCameras(ACameraManager* cmrMgr) {
     if (!cmrMgr) return;
 
     ACameraIdList* cameraIds = nullptr;
     camera_status_t status = ACameraManager_getCameraIdList(cmrMgr, &cameraIds);
-    LOGI("camera Status = %d, %s", status, GetErrorStr(status));
+    LOGI("camera Status = %d, %s", status, getErrorStr(status));
 
     for (int i = 0; i < cameraIds->numCameras; ++i) {
         const char* id = cameraIds->cameraIds[i];
@@ -393,20 +391,20 @@ void PrintCameras(ACameraManager* cmrMgr) {
 
         for (int tagIdx = 0; tagIdx < count; ++tagIdx) {
             ACameraMetadata_const_entry val = {};
-            camera_status_t status =
+            status =
                 ACameraMetadata_getConstEntry(metadataObj, tags[tagIdx], &val);
             if (status != ACAMERA_OK) {
                 LOGW(
                     "Unsupported Tag: %s",
-                    GetTagStr(static_cast<acamera_metadata_tag_t>(tags[tagIdx]))
+                    getTagStr(static_cast<acamera_metadata_tag_t>(tags[tagIdx]))
                 );
                 continue;
             }
 
-            PrintTagVal("Camera Tag:", val);
+            printTagVal("Camera Tag:", val);
 
             if (ACAMERA_LENS_FACING == tags[tagIdx]) {
-                PrintLensFacing(val);
+                printLensFacing(val);
             }
         }
         ACameraMetadata_free(metadataObj);
@@ -415,7 +413,7 @@ void PrintCameras(ACameraManager* cmrMgr) {
     ACameraManager_deleteCameraIdList(cameraIds);
 }
 
-void PrintRequestMetadata(ACaptureRequest* req) {
+void printRequestMetadata(ACaptureRequest* req) {
     if (!req) return;
     int32_t count;
     const uint32_t* tags;
@@ -424,7 +422,7 @@ void PrintRequestMetadata(ACaptureRequest* req) {
         ACameraMetadata_const_entry val;
         CALL_REQUEST(getConstEntry(req, tags[idx], &val));
         const char* name =
-            GetTagStr(static_cast<acamera_metadata_tag_t>(tags[idx]));
+            getTagStr(static_cast<acamera_metadata_tag_t>(tags[idx]));
 
         for (uint32_t i = 0; i < val.count; ++i) {
             switch (val.type) {
@@ -462,10 +460,8 @@ void PrintRequestMetadata(ACaptureRequest* req) {
     }
 }
 
-/*
- * CameraDevice error state translation, used in
- *     ACameraDevice_ErrorStateCallback
- */
+// CameraDevice error state translation, used in
+// ACameraDevice_ErrorStateCallback
 using DEV_ERROR_PAIR = std::pair<int, const char*>;
 static std::vector<DEV_ERROR_PAIR> devErrors{
     MAKE_PAIR(ERROR_CAMERA_IN_USE),
@@ -476,8 +472,11 @@ static std::vector<DEV_ERROR_PAIR> devErrors{
 };
 
 const char* GetCameraDeviceErrorStr(int err) {
-    return GetPairStr<int>(err, devErrors);
+    return getPairStr<int>(err, devErrors);
 }
-void PrintCameraDeviceError(int err) {
+
+void printCameraDeviceError(int err) {
     LOGI("CameraDeviceError(%#x): %s", err, GetCameraDeviceErrorStr(err));
 }
+
+}  // namespace camera::util

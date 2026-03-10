@@ -5,8 +5,10 @@
 
 #include <utility>
 
-#include "camera_utils.hpp"
-#include "native_debug.hpp"
+#include "CameraUtils.hpp"
+#include "Util.hpp"
+
+using namespace camera::util;
 
 /**
  * Range of Camera Exposure Time:

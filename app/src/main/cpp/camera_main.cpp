@@ -1,5 +1,5 @@
+#include "Util.hpp"
 #include "camera_engine.hpp"
-#include "native_debug.hpp"
 
 /*
  * SampleEngine global object

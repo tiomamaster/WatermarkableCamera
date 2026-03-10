@@ -38,7 +38,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
 
-#include "native_debug.hpp"
+#include "Util.hpp"
 
 constexpr uint64_t FenceTimeout = 100000000;
 const std::string TEXTURE_PATH = "textures/texture.jpg";
@@ -580,8 +580,7 @@ class VulkanApplication {
                 vk::Result::eTimeout ==
                 device.waitForFences(
                     *mediaInFlightFences[currentFrame], vk::True, FenceTimeout
-                )
-            );
+                ));
 
             uint32_t imageIndex;
             try {
@@ -1343,7 +1342,7 @@ class VulkanApplication {
                 break;
             }
         }
-        if (queueIndex == ~0) {
+        if (queueIndex == ~0u) {
             throw std::runtime_error(
                 "Could not find a queue for graphics and "
                 "present -> "
@@ -2448,15 +2447,19 @@ class VulkanApplication {
 
             sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
             destinationStage = vk::PipelineStageFlagBits::eTransfer;
-        } else if (oldLayout == vk::ImageLayout::eTransferDstOptimal &&
-                   newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+        } else if (
+            oldLayout == vk::ImageLayout::eTransferDstOptimal &&
+            newLayout == vk::ImageLayout::eShaderReadOnlyOptimal
+        ) {
             barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
             barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
             sourceStage = vk::PipelineStageFlagBits::eTransfer;
             destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
-        } else if (oldLayout == vk::ImageLayout::eUndefined &&
-                   newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+        } else if (
+            oldLayout == vk::ImageLayout::eUndefined &&
+            newLayout == vk::ImageLayout::eShaderReadOnlyOptimal
+        ) {
             barrier.srcAccessMask = vk::AccessFlagBits::eNone;
             barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
