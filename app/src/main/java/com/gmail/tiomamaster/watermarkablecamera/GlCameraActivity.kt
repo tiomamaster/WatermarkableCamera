@@ -138,8 +138,13 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, binding.rsv).apply {
-            hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(
+                WindowInsetsCompat.Type.statusBars()
+                        or WindowInsetsCompat.Type.navigationBars()
+                        or WindowInsetsCompat.Type.systemBars()
+                        or WindowInsetsCompat.Type.displayCutout()
+            )
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
@@ -197,7 +202,6 @@ class GlCameraActivity : AppCompatActivity(), Renderer.StateListener {
         }
     }
 
-    @SuppressLint("InflateParams", "Recycle")
     private fun setupWatermark() {
         renderer.setupWatermarkSurfaceTexture(binding.rsv.width, binding.rsv.height)
         watBinding = WatermarkBinding.inflate(layoutInflater)

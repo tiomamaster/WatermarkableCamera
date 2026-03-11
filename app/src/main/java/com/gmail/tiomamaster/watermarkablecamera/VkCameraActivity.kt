@@ -1,20 +1,18 @@
 package com.gmail.tiomamaster.watermarkablecamera
 
-import android.annotation.SuppressLint
-import android.hardware.HardwareBuffer
 import android.media.MediaCodec
 import android.media.MediaRecorder
 import android.media.MediaRecorder.OutputFormat
-import android.os.Build.VERSION
-import android.os.Build.VERSION_CODES
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.util.Log
 import android.view.KeyEvent
 import android.view.Surface
 import android.view.View
-import android.view.WindowManager.LayoutParams
+import android.view.WindowManager
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.gmail.tiomamaster.watermarkablecamera.databinding.ActivityCameraVkBinding
@@ -33,9 +31,28 @@ class VkCameraActivity : GameActivity() {
     private lateinit var mediaRecorder: MediaRecorder
     private var recording = false
 
+    private var resolution = Resolution.FHD
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        hideSystemUI()
+        Log.i(TAG, "Called onCreate")
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(
+                WindowInsetsCompat.Type.statusBars()
+                        or WindowInsetsCompat.Type.navigationBars()
+                        or WindowInsetsCompat.Type.systemBars()
+                        or WindowInsetsCompat.Type.displayCutout()
+            )
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+
+        resolution = Resolution.entries[intent.getIntExtra(MainActivity.EXTRA_RESOLUTION, 1)]
 
         Handler(mainLooper).postDelayed({
             setupWatermark()
@@ -48,53 +65,32 @@ class VkCameraActivity : GameActivity() {
 //        var i = 0
 //        fixedRateTimer(period = 1000, initialDelay = 1500) {
 //            watermarkText.text = "${++i}"
-//            // TODO: animate it
 //            watermarkImage.x = Random.nextDouble(0.0, watermark.width.toDouble()).toFloat()
 //            watermarkImage.y = Random.nextDouble(0.0, watermark.height.toDouble()).toFloat()
 //            watermark.update()
 //        }
     }
 
-    @SuppressLint("InflateParams", "Recycle")
+    override fun onStart() {
+        super.onStart()
+        Log.i(TAG, "Called onStart")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.i(TAG, "Called onResume")
+    }
+
     private fun setupWatermark() {
         watBinding = WatermarkBinding.inflate(layoutInflater)
         with(watBinding.root) {
-//            val width = resources.displayMetrics.widthPixels
-//            val height = resources.displayMetrics.heightPixels
-            val width = mSurfaceView.width
-            val height = mSurfaceView.height
+            surface = getWatermarkSurface()
             val widthMeasureSpec =
-                View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY)
+                View.MeasureSpec.makeMeasureSpec(mSurfaceView.width, View.MeasureSpec.EXACTLY)
             val heightMeasureSpec =
-                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
+                View.MeasureSpec.makeMeasureSpec(mSurfaceView.height, View.MeasureSpec.EXACTLY)
             this.widthMeasureSpec = widthMeasureSpec
             this.heightMeasureSpec = heightMeasureSpec
-            Log.i(TAG, "Setup watermark with size $width:$height")
-
-//            val watImageReader = ImageReader.newInstance(
-//                w,
-//                h,
-//                PixelFormat.RGBA_8888,
-//                2,
-//                HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE
-//            )
-
-//            surface = watImageReader.surface
-            surface = getWatermarkSurface()
-
-//            watImageReader.setOnImageAvailableListener({
-//                Log.i(TAG, "new image available")
-//                val image = it.acquireLatestImage()
-//                val hwBuff = image.hardwareBuffer
-//                // process hwBuff, like render image using vk
-//                Log.i(
-//                    TAG,
-//                    "hardware buffer acquired, ${hwBuff?.width}:${hwBuff?.height}:${hwBuff?.format}"
-//                )
-//                test(hwBuff!!)
-//                hwBuff.close()
-//                image.close()
-//            }, null)
             update()
         }
     }
@@ -128,28 +124,6 @@ class VkCameraActivity : GameActivity() {
         }
     }
 
-    private fun hideSystemUI() {
-        // This will put the game behind any cutouts and waterfalls on devices which have
-        // them, so the corresponding insets will be non-zero.
-
-        // We cannot guarantee that AndroidManifest won't be tweaked
-        // and we don't want to crash if that happens so we suppress warning.
-        @SuppressLint("ObsoleteSdkInt")
-        if (VERSION.SDK_INT >= VERSION_CODES.P) {
-            window.attributes.layoutInDisplayCutoutMode =
-                LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-        }
-        val decorView: View = window.decorView
-        val controller = WindowInsetsControllerCompat(
-            window,
-            decorView
-        )
-        controller.hide(WindowInsetsCompat.Type.systemBars())
-        controller.hide(WindowInsetsCompat.Type.displayCutout())
-        controller.systemBarsBehavior =
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-    }
-
     fun startRecording(): Boolean = kotlin.runCatching {
         nativeStartStopRecording()
         mediaRecorder.start()
@@ -175,6 +149,8 @@ class VkCameraActivity : GameActivity() {
     }
 
     override fun onCreateSurfaceView() {
+        Log.i(TAG, "Called onCreateSurfaceView")
+
         mSurfaceView = createSurfaceView() ?: return
 
         binding = ActivityCameraVkBinding.inflate(layoutInflater)
@@ -188,10 +164,11 @@ class VkCameraActivity : GameActivity() {
         // adjust video's preview size to make it aspect ratio equal to recorded video
         val height = resources.displayMetrics.heightPixels
         val width = resources.displayMetrics.widthPixels
+        val asp = resolution.size.width / resolution.size.height.toFloat()
         if (height > width) {
-            binding.frameLayout.layoutParams.height = (width * ASP).roundToInt()
+            binding.frameLayout.layoutParams.height = (width * asp).roundToInt()
         } else {
-            binding.frameLayout.layoutParams.width = (height * ASP).roundToInt()
+            binding.frameLayout.layoutParams.width = (height * asp).roundToInt()
         }
 
         // Register as a callback for the rendering of the surface, so that we can pass this
@@ -235,9 +212,5 @@ class VkCameraActivity : GameActivity() {
         }
 
         val TAG: String = VkCameraActivity::class.java.simpleName
-
-        const val WIDTH = 720
-        const val HEIGHT = 1280
-        const val ASP = HEIGHT / WIDTH.toFloat()
     }
 }

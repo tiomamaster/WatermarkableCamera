@@ -4,6 +4,7 @@
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <jni.h>
 
+#include "Util.hpp"
 #include "camera_engine.hpp"
 #include "hellovk.hpp"
 #include "image_reader.hpp"
@@ -97,6 +98,8 @@ void drawFrame(AImage* image, bool isCam) {
 
 // Android main entry point required by the Android Glue library
 [[maybe_unused]] void android_main(struct android_app* app) {
+    LOGI("Called android_main");
+
     AppState appState{};
     CameraEngine camEngine(app);
     camEng = &camEngine;
