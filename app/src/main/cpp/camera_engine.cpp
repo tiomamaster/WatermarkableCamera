@@ -1,6 +1,8 @@
 #include "camera_engine.hpp"
 
-#include "Util.hpp"
+#include "util.hpp"
+
+using namespace camera::util;
 
 /**
  * constructor and destructor for main application class
@@ -33,7 +35,7 @@ void CameraEngine::CreateCamera(void) {
     // Camera needed to be requested at the run-time from Java SDK
     // if Not granted, do nothing.
     if (!cameraGranted_ || !app_->window) {
-        LOGW("Camera Sample requires Full Camera access");
+        logW("Camera Sample requires Full Camera access");
         return;
     }
 
@@ -52,7 +54,7 @@ void CameraEngine::CreateCamera(void) {
             imageRotation = (angle - rotation_ + 360) % 360;
         }
     }
-    LOGI(
+    logI(
         "Phone Rotation: %d, Present Rotation Angle: %d",
         rotation_,
         imageRotation
@@ -62,7 +64,7 @@ void CameraEngine::CreateCamera(void) {
 
     ASSERT(view.width && view.height, "Could not find supportable resolution");
 
-    LOGI("Selected camera preview w = %i, h = %i", view.width, view.height);
+    logI("Selected camera preview w = %i, h = %i", view.width, view.height);
 
     // Request the necessary nativeWindow to OS
     bool portraitNativeWindow =
@@ -157,7 +159,7 @@ void CameraEngine::DrawFrame(void) {
         return;
     }
 
-    LOGI("Next image acquired");
+    logI("Next image acquired");
 
     //    ANativeWindow_acquire(app_->window);
     //    ANativeWindow_Buffer buf;
@@ -178,7 +180,7 @@ AHardwareBuffer* CameraEngine::getNextHwBuffer() {
         return nullptr;
     }
 
-    LOGI("Next image acquired");
+    logI("Next image acquired");
     AHardwareBuffer* hwBuffer;
     media_status_t status = AImage_getHardwareBuffer(image, &hwBuffer);
 
@@ -186,7 +188,7 @@ AHardwareBuffer* CameraEngine::getNextHwBuffer() {
         return nullptr;
     }
 
-    LOGI("Hardware buffer acquired");
+    logI("Hardware buffer acquired");
 
     AImage_delete(image);
 

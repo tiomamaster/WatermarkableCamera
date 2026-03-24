@@ -4,7 +4,6 @@
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <jni.h>
 
-#include "Util.hpp"
 #include "camera_engine.hpp"
 #include "hellovk.hpp"
 #include "image_reader.hpp"
@@ -27,13 +26,13 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
 
     switch (cmd) {
         case APP_CMD_START:
-            LOGI("Called - APP_CMD_START");
+            logI("Called - APP_CMD_START");
             break;
         case APP_CMD_INIT_WINDOW:
             // The window is being shown, get it ready.
-            LOGI("Called - APP_CMD_INIT_WINDOW");
+            logI("Called - APP_CMD_INIT_WINDOW");
             if (appState->androidApp->window != nullptr) {
-                LOGI("Init camera engine");
+                logI("Init camera engine");
                 appState->camEngine->SaveNativeWinRes(
                     ANativeWindow_getWidth(app->window),
                     ANativeWindow_getHeight(app->window),
@@ -41,12 +40,12 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
                 );
                 appState->camEngine->OnAppInitWindow();
 
-                LOGI("Setting a new surface");
+                logI("Setting a new surface");
                 appState->vkApp->reset(
                     app->window, app->activity->assetManager
                 );
                 if (!appState->vkApp->initialized) {
-                    LOGI("Starting application");
+                    logI("Starting application");
                     appState->vkApp->initVulkan();
                 }
                 appState->canRender = true;
@@ -55,12 +54,12 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
         case APP_CMD_TERM_WINDOW:
             // todo: terminate camera
             // The window is being hidden or closed, clean it up.
-            LOGI("Called - APP_CMD_TERM_WINDOW");
+            logI("Called - APP_CMD_TERM_WINDOW");
             appState->canRender = false;
             break;
         case APP_CMD_DESTROY:
             // The window is being hidden or closed, clean it up.
-            LOGI("Destroying");
+            logI("Destroying");
             appState->vkApp->cleanup();
         default:
             break;
@@ -72,19 +71,19 @@ CameraEngine* camEng;
 void drawFrame(AImage* image, bool isCam) {
     if (!image) return;
 
-    // LOGI("Next image acquired");
+    // logI("Next image acquired");
 
     AHardwareBuffer* hwBuffer;
     media_status_t status = AImage_getHardwareBuffer(image, &hwBuffer);
 
     if (status != AMEDIA_OK) {
-        LOGE("Can't acquire hw buffer");
+        logE("Can't acquire hw buffer");
         AImage_delete(image);
         return;
     }
 
     AHardwareBuffer_acquire(hwBuffer);
-    // LOGI("Buffer %p acquired by vk renderer", hwBuffer);
+    // logI("Buffer %p acquired by vk renderer", hwBuffer);
 
     if (isCam) {
         vkApp.hwBufferToTexture(hwBuffer);
@@ -98,7 +97,7 @@ void drawFrame(AImage* image, bool isCam) {
 
 // Android main entry point required by the Android Glue library
 [[maybe_unused]] void android_main(struct android_app* app) {
-    LOGI("Called android_main");
+    logI("Called android_main");
 
     AppState appState{};
     CameraEngine camEngine(app);
@@ -129,7 +128,7 @@ void drawFrame(AImage* image, bool isCam) {
 }
 
 jobject getWatermarkSurface(JNIEnv* env, jobject) {
-    LOGI("getWatermarkSurface called");
+    logI("getWatermarkSurface called");
     ImageReader* ir = camEng->getWatImageReader();
     ANativeWindow* nativeWindow = ir->GetNativeWindow();
     jobject surface = ANativeWindow_toSurface(env, nativeWindow);
@@ -137,7 +136,7 @@ jobject getWatermarkSurface(JNIEnv* env, jobject) {
 }
 
 void setMediaSurface(JNIEnv* env, jobject, jobject surface) {
-    LOGI("setMediaSurface called");
+    logI("setMediaSurface called");
     ANativeWindow* mediaWindow = ANativeWindow_fromSurface(env, surface);
     vkApp.setMediaWindow(mediaWindow);
 }

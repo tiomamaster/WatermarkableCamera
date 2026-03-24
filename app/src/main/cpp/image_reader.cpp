@@ -8,7 +8,9 @@
 #include <string>
 #include <thread>
 
-#include "Util.hpp"
+#include "util.hpp"
+
+using namespace camera::util;
 
 /*
  * For JPEG capture, captured files are saved under
@@ -90,7 +92,7 @@ void ImageReader::ImageCallback(AImageReader* reader) {
         std::thread writeFileHandler(&ImageReader::WriteFile, this, image);
         writeFileHandler.detach();
     } else if (format == AIMAGE_FORMAT_YUV_420_888) {
-        //        LOGI("ImageCallback called for AIMAGE_FORMAT_YUV_420_888
+        //        logI("ImageCallback called for AIMAGE_FORMAT_YUV_420_888
         //        format");
     }
 }
@@ -219,19 +221,19 @@ bool ImageReader::DisplayImage(ANativeWindow_Buffer* buf, AImage* image) {
 
     switch (presentRotation_) {
         case 0:
-            LOGI("PresentImage");
+            logI("PresentImage");
             PresentImage(buf, image);
             break;
         case 90:
-            LOGI("PresentImage90");
+            logI("PresentImage90");
             PresentImage90(buf, image);
             break;
         case 180:
-            LOGI("PresentImage180");
+            logI("PresentImage180");
             PresentImage180(buf, image);
             break;
         case 270:
-            LOGI("PresentImage270");
+            logI("PresentImage270");
             PresentImage270(buf, image);
             break;
         default:

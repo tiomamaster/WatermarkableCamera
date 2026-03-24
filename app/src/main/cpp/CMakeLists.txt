@@ -55,9 +55,8 @@ function(add_slang_shader_target TARGET)
 endfunction()
 
 add_library(
-  ${PROJECT_NAME} SHARED
-  main.cpp CameraUtils.cpp image_reader.cpp camera_engine.cpp
-  camera_manager.cpp camera_listeners.cpp)
+  ${PROJECT_NAME} SHARED main.cpp util.cpp image_reader.cpp camera_engine.cpp
+                         camera_manager.cpp camera_listeners.cpp)
 
 # add lib dependencies
 target_link_libraries(

@@ -2,9 +2,8 @@
 
 #include <thread>
 
-#include "CameraUtils.hpp"
-#include "Util.hpp"
 #include "camera_manager.hpp"
+#include "util.hpp"
 
 using namespace camera::util;
 
@@ -66,7 +65,7 @@ ACameraDevice_stateCallbacks* NDKCamera::GetDeviceListener() {
  */
 void NDKCamera::OnDeviceState(ACameraDevice* dev) {
     std::string id(ACameraDevice_getId(dev));
-    LOGW("device %s is disconnected", id.c_str());
+    logW("device %s is disconnected", id.c_str());
 
     cameras_[id].available_ = false;
     ACameraDevice_close(cameras_[id].device_);
@@ -81,7 +80,7 @@ void NDKCamera::OnDeviceState(ACameraDevice* dev) {
 void NDKCamera::OnDeviceError(ACameraDevice* dev, int err) {
     std::string id(ACameraDevice_getId(dev));
 
-    LOGI("CameraDevice %s is in error %#x", id.c_str(), err);
+    logI("CameraDevice %s is in error %#x", id.c_str(), err);
     printCameraDeviceError(err);
 
     CameraId& cam = cameras_[id];
@@ -99,25 +98,25 @@ void NDKCamera::OnDeviceError(ACameraDevice* dev, int err) {
             cam.owner_ = false;
             break;
         default:
-            LOGI("Unknown Camera Device Error: %#x", err);
+            logI("Unknown Camera Device Error: %#x", err);
     }
 }
 
 // CaptureSession state callbacks
 void OnSessionClosed(void* ctx, ACameraCaptureSession* ses) {
-    LOGW("session %p closed", ses);
+    logW("session %p closed", ses);
     reinterpret_cast<NDKCamera*>(ctx)->OnSessionState(
         ses, CaptureSessionState::CLOSED
     );
 }
 void OnSessionReady(void* ctx, ACameraCaptureSession* ses) {
-    LOGW("session %p ready", ses);
+    logW("session %p ready", ses);
     reinterpret_cast<NDKCamera*>(ctx)->OnSessionState(
         ses, CaptureSessionState::READY
     );
 }
 void OnSessionActive(void* ctx, ACameraCaptureSession* ses) {
-    LOGW("session %p active", ses);
+    logW("session %p active", ses);
     reinterpret_cast<NDKCamera*>(ctx)->OnSessionState(
         ses, CaptureSessionState::ACTIVE
     );
@@ -141,7 +140,7 @@ void NDKCamera::OnSessionState(
     ACameraCaptureSession* ses, CaptureSessionState state
 ) {
     if (!ses || ses != captureSession_) {
-        LOGW("CaptureSession is %s", (ses ? "NOT our session" : "NULL"));
+        logW("CaptureSession is %s", (ses ? "NOT our session" : "NULL"));
         return;
     }
 
@@ -249,7 +248,7 @@ void NDKCamera::OnCaptureSequenceEnd(
         return;
 
     // resume preview
-    CALL_SESSION(setRepeatingRequest(
+    callCamera(ACameraCaptureSession_setRepeatingRequest(
         captureSession_,
         nullptr,
         1,

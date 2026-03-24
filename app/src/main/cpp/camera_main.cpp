@@ -1,5 +1,7 @@
-#include "Util.hpp"
 #include "camera_engine.hpp"
+#include "util.hpp"
+
+using namespace camera::util;
 
 /*
  * SampleEngine global object
@@ -65,7 +67,7 @@ extern "C" void android_main(struct android_app* state) {
         pEngineObj->DrawFrame();
     }
 
-    LOGI("CameraEngine thread destroy requested!");
+    logI("CameraEngine thread destroy requested!");
     engine.DeleteCamera();
     pEngineObj = nullptr;
 }

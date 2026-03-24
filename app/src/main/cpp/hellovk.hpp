@@ -38,7 +38,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
 
-#include "Util.hpp"
+#include "util.hpp"
+
+using namespace camera::util;
 
 constexpr uint64_t FenceTimeout = 100000000;
 const std::string TEXTURE_PATH = "textures/texture.jpg";
@@ -119,7 +121,7 @@ static std::vector<char> readFile(
     AAsset* asset =
         AAssetManager_open(assetManager, filename.c_str(), AASSET_MODE_BUFFER);
     if (!asset) {
-        LOGE("Failed to open asset: %s", filename.c_str());
+        logE("Failed to open asset: %s", filename.c_str());
         throw std::runtime_error("Failed to open file: " + filename);
     }
 
@@ -172,7 +174,7 @@ class VulkanApplication {
             .clipped = true
         };
 
-        LOGI(
+        logI(
             "media swapchain min image count = %i",
             swapChainCreateInfo.minImageCount
         );
@@ -180,17 +182,17 @@ class VulkanApplication {
         mediaSwapChain = device.createSwapchainKHR(swapChainCreateInfo);
         mediaSwapChainImages = mediaSwapChain.getImages();
 
-        LOGI(
+        logI(
             "media swapchain images count = %i",
             (int)mediaSwapChainImages.size()
         );
-        LOGI("swapchain images count = %i", (int)swapChainImages.size());
-        LOGI("swapchain format = %i", (int)swapChainSurfaceFormat.format);
-        LOGI(
+        logI("swapchain images count = %i", (int)swapChainImages.size());
+        logI("swapchain format = %i", (int)swapChainSurfaceFormat.format);
+        logI(
             "swapchain media format = %i",
             (int)mediaSwapChainSurfaceFormat.format
         );
-        LOGI(
+        logI(
             "media swapchain w = %i, h = %i",
             mediaSwapChainExtent.width,
             mediaSwapChainExtent.height
@@ -266,7 +268,7 @@ class VulkanApplication {
 
     void startStopRecording() {
         isRecording = !isRecording;
-        LOGI("startStopRecording called, isRecording = %d", isRecording.load());
+        logI("startStopRecording called, isRecording = %d", isRecording.load());
     }
 
     // Initialize Vulkan
@@ -341,7 +343,7 @@ class VulkanApplication {
         );
 
         if (camTextures.size() == 0) {
-            LOGI("Resize camTextures");
+            logI("Resize camTextures");
             camTextures.resize(MAX_FRAMES_IN_FLIGHT);
         }
 
@@ -751,7 +753,7 @@ class VulkanApplication {
         // );
 
         if (watTextures.size() == 0) {
-            LOGI("Resize watTextures");
+            logI("Resize watTextures");
             // watTextures.resize(MAX_FRAMES_IN_FLIGHT);
             watTextures.resize(1);
         }
@@ -1214,7 +1216,7 @@ class VulkanApplication {
         };
 
         instance = vk::raii::Instance(context, createInfo);
-        LOGI("Vulkan instance created");
+        logI("Vulkan instance created");
     }
 
     void createSurface() {
@@ -1277,7 +1279,7 @@ class VulkanApplication {
             // Print device information
             vk::PhysicalDeviceProperties deviceProperties =
                 physicalDevice.getProperties();
-            LOGI("Selected GPU: %s", deviceProperties.deviceName.data());
+            logI("Selected GPU: %s", deviceProperties.deviceName.data());
         } else {
             throw std::runtime_error("Failed to find a suitable GPU");
         }
@@ -1311,10 +1313,10 @@ class VulkanApplication {
 
         if (result && supported == vk::True) {
             appInfo.profileSupported = true;
-            LOGI("Using KHR roadmap 2022 profile");
+            logI("Using KHR roadmap 2022 profile");
         } else {
             appInfo.profileSupported = false;
-            LOGI(
+            logI(
                 "Falling back to traditional rendering "
                 "(profile not "
                 "supported)"
@@ -1568,12 +1570,12 @@ class VulkanApplication {
 
     // Create graphics pipeline
     void createGraphicsPipeline() {
-        LOGI("Loading shaders from assets");
+        logI("Loading shaders from assets");
 
         auto shaderModule =
             createShaderModule(readFile("shaders/tex.spv", assetManager));
 
-        LOGI("Shaders loaded successfully");
+        logI("Shaders loaded successfully");
 
         vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
             .stage = vk::ShaderStageFlagBits::eVertex,
@@ -1725,7 +1727,7 @@ class VulkanApplication {
     // Create texture image
     void createTextureImage() {
         // Load texture image
-        LOGI("Loading texture from assets");
+        logI("Loading texture from assets");
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = nullptr;
 
@@ -1745,7 +1747,7 @@ class VulkanApplication {
             );
         }
 
-        LOGI("Texture loaded successfully w = %i h = %i", texWidth, texHeight);
+        logI("Texture loaded successfully w = %i h = %i", texWidth, texHeight);
 
         vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
