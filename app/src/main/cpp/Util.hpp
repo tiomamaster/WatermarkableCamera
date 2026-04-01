@@ -5,6 +5,7 @@
 #include <camera/NdkCameraManager.h>
 
 #include <source_location>
+#include <string>
 
 namespace camera::util {
 
@@ -37,6 +38,25 @@ inline void logE(Args&&... args) {
     __android_log_print(ANDROID_LOG_ERROR, TAG, args...);
 }
 
+template <typename T>
+inline void logAssert(
+    T&& assertion,
+    const std::string_view msg = {},
+    std::source_location location = std::source_location::current()
+) {
+    if (!assertion) {
+        __android_log_assert(
+            nullptr,
+            camera::util::TAG,
+            "%s::%s(%i): *** assertion failed: %s",
+            location.file_name(),
+            location.function_name(),
+            location.line(),
+            msg.data()
+        );
+    }
+}
+
 void callCamera(
     camera_status_t status,
     std::source_location location = std::source_location::current()
@@ -53,8 +73,3 @@ void printCameraDeviceError(int err);
 void printRequestMetadata(ACaptureRequest* req);
 
 }  // namespace camera::util
-
-#define ASSERT(cond, fmt, ...)                                              \
-    if (!(cond)) {                                                          \
-        __android_log_assert(#cond, camera::util::TAG, fmt, ##__VA_ARGS__); \
-    }

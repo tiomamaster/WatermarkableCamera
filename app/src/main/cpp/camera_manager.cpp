@@ -32,11 +32,11 @@ NDKCamera::NDKCamera()
     memset(requests_.data(), 0, requests_.size() * sizeof(requests_[0]));
     cameras_.clear();
     cameraMgr_ = ACameraManager_create();
-    ASSERT(cameraMgr_, "Failed to create cameraManager");
+    logAssert(cameraMgr_, "Failed to create cameraManager");
 
     // Pick up a back-facing camera to preview
     EnumerateCamera();
-    ASSERT(activeCameraId_.size(), "Unknown ActiveCameraIdx");
+    logAssert(activeCameraId_.size(), "Unknown ActiveCameraIdx");
 
     // Create back facing camera device
     callCamera(ACameraManager_openCamera(
@@ -368,7 +368,7 @@ void NDKCamera::EnumerateCamera() {
         ACameraMetadata_free(metadataObj);
     }
 
-    ASSERT(!cameras_.empty(), "No Camera Available on the device");
+    logAssert(!cameras_.empty(), "No Camera Available on the device");
     if (activeCameraId_.empty()) {
         // if no back facing camera found, pick up the first one to use...
         activeCameraId_ = cameras_.begin()->second.id_;
@@ -427,12 +427,7 @@ void NDKCamera::StartPreview(bool start) {
     } else if (!start && captureSessionState_ == CaptureSessionState::ACTIVE) {
         ACameraCaptureSession_stopRepeating(captureSession_);
     } else {
-        ASSERT(
-            false,
-            "Conflict states(%s, %d)",
-            (start ? "true" : "false"),
-            static_cast<int>(captureSessionState_)
-        );
+        logAssert(false, "conflict states");
     }
 }
 
@@ -477,11 +472,7 @@ void NDKCamera::UpdateCameraRequestParameter(int32_t code, int64_t val) {
             }
             break;
         default:
-            ASSERT(
-                false,
-                "==ERROR==: error code for CameraParameterChange: %d",
-                code
-            );
+            logAssert(false, "wrong code for CameraParameterChange");
             return;
     }
 

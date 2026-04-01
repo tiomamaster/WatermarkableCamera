@@ -8,7 +8,7 @@ using namespace camera::util;
  */
 static CameraEngine* pEngineObj = nullptr;
 CameraEngine* GetAppEngine(void) {
-    ASSERT(pEngineObj, "AppEngine has not initialized");
+    logAssert(pEngineObj, "AppEngine has not initialized");
     return pEngineObj;
 }
 
@@ -58,7 +58,7 @@ extern "C" void android_main(struct android_app* state) {
     while (!state->destroyRequested) {
         struct android_poll_source* source = nullptr;
         auto result = ALooper_pollOnce(0, NULL, nullptr, (void**)&source);
-        ASSERT(
+        logAssert(
             result != ALOOPER_POLL_ERROR, "ALooper_pollOnce returned an error"
         );
         if (source != NULL) {

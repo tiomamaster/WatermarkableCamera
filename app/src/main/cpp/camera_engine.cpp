@@ -43,7 +43,7 @@ void CameraEngine::CreateCamera(void) {
     rotation_ = displayRotation;
 
     camera_ = new NDKCamera();
-    ASSERT(camera_, "Failed to Create CameraObject");
+    logAssert(camera_, "Failed to Create CameraObject");
 
     int32_t facing = 0, angle = 0, imageRotation = 0;
     if (camera_->GetSensorOrientation(&facing, &angle)) {
@@ -62,7 +62,9 @@ void CameraEngine::CreateCamera(void) {
     ImageFormat view{1920, 1080, 0}, capture{0, 0, 0}, wat{1080, 1920, 0};
     // camera_->MatchCaptureSizeRequest(app_->window, &view, &capture);
 
-    ASSERT(view.width && view.height, "Could not find supportable resolution");
+    logAssert(
+        view.width && view.height, "Could not find supportable resolution"
+    );
 
     logI("Selected camera preview w = %i, h = %i", view.width, view.height);
 
@@ -220,7 +222,7 @@ void CameraEngine::OnAppInitWindow(void) {
     rotation_ = GetDisplayRotation();
 
     CreateCamera();
-    ASSERT(camera_, "CameraCreation Failed");
+    logAssert(camera_, "CameraCreation Failed");
 
     //    EnableUI();
 

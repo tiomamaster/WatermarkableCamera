@@ -144,11 +144,7 @@ void NDKCamera::OnSessionState(
         return;
     }
 
-    ASSERT(
-        state < CaptureSessionState::MAX_STATE,
-        "Wrong state %d",
-        static_cast<int>(state)
-    );
+    logAssert(state < CaptureSessionState::MAX_STATE, "wrong session state");
 
     captureSessionState_ = state;
 }
@@ -225,11 +221,6 @@ void NDKCamera::OnCaptureFailed(
     ACameraCaptureFailure* failure
 ) {
     if (valid_ && request == requests_[JPG_CAPTURE_REQUEST_IDX].request_) {
-        ASSERT(
-            failure->sequenceId ==
-                requests_[JPG_CAPTURE_REQUEST_IDX].sessionSequenceId_,
-            "Error jpg sequence id"
-        )
         StartPreview(true);
     }
 }

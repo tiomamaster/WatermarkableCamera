@@ -1,9 +1,11 @@
 #include "util.hpp"
 
+#include <camera/NdkCameraError.h>
 #include <camera/NdkCameraManager.h>
 #include <media/NdkImage.h>
 
 #include <cinttypes>
+#include <string>
 #include <typeinfo>
 #include <utility>
 #include <vector>
@@ -14,14 +16,12 @@
 namespace camera::util {
 
 void callCamera(camera_status_t status, std::source_location location) {
-    ASSERT(
-        status == ACAMERA_OK,
-        "%s, line %i: camera call failed with code - %#x, %s",
-        location.function_name(),
-        location.line(),
-        status,
-        getErrorStr(status)
-    );
+    if (status == ACAMERA_OK) return;
+
+    using namespace std::string_literals;
+    auto msg = "camera call failed with code - "s + std::to_string(status) +
+               ", " + getErrorStr(status);
+    logAssert(false, msg, location);
 }
 
 template <typename T>
@@ -291,13 +291,7 @@ void printMetadataTags(int32_t entries, const uint32_t* pTags) {
 }
 
 void printLensFacing(ACameraMetadata_const_entry& lens) {
-    ASSERT(
-        lens.tag == ACAMERA_LENS_FACING,
-        "Wrong tag(%#x) of %s to %s",
-        lens.tag,
-        getTagStr((acamera_metadata_tag_t)lens.tag),
-        __FUNCTION__
-    );
+    logAssert(lens.tag == ACAMERA_LENS_FACING, "wrong tag");
     logI(
         "LensFacing: tag(%#x), type(%d), count(%d), val(%#x)",
         lens.tag,
@@ -311,20 +305,16 @@ void printLensFacing(ACameraMetadata_const_entry& lens) {
 //    format, width, height, input?
 //    ACAMERA_TYPE_INT32 type
 void printStreamConfigurations(ACameraMetadata_const_entry& val) {
-#define MODE_LABEL "ModeInfo:"
     const char* tagName =
         getTagStr(static_cast<acamera_metadata_tag_t>(val.tag));
-    ASSERT(
-        !(val.count & 0x3),
-        "STREAM_CONFIGURATION (%d) should multiple of 4",
-        val.count
+    logAssert(
+        !(val.count & 0x3), "STREAM_CONFIGURATION count should multiple of 4"
     );
-    ASSERT(
+    logAssert(
         val.type == ACAMERA_TYPE_INT32,
-        "STREAM_CONFIGURATION TYPE(%d) is not ACAMERA_TYPE_INT32(1)",
-        val.type
+        "STREAM_CONFIGURATION TYPE is not ACAMERA_TYPE_INT32(1)"
     );
-    logI("%s -- %s:", tagName, MODE_LABEL);
+    logI("%s -- %s:", tagName, "ModeInfo:");
     for (uint32_t i = 0; i < val.count; i += 4) {
         logI(
             "%s: %08d x %08d  %s",
@@ -334,7 +324,6 @@ void printStreamConfigurations(ACameraMetadata_const_entry& val) {
             val.data.i32[i + 3] ? "INPUT" : "OUTPUT"
         );
     }
-#undef MODE_LABEL
 }
 
 void printTagVal(const char* printLabel, ACameraMetadata_const_entry& val) {
@@ -375,7 +364,7 @@ void printTagVal(const char* printLabel, ACameraMetadata_const_entry& val) {
                 );
                 break;
             default:
-                ASSERT(false, "Unknown tag value type: %d", val.type);
+                logAssert(false, "unknown tag value type");
         }
     }
 }
@@ -465,7 +454,7 @@ void printRequestMetadata(ACaptureRequest* req) {
                     );
                     break;
                 default:
-                    ASSERT(false, "Unknown tag value type: %d", val.type);
+                    logAssert(false, "unknown tag value type");
             }
         }
     }
