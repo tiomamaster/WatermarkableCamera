@@ -3,8 +3,10 @@
 
 #include <android/native_window.h>
 #include <game-activity/native_app_glue/android_native_app_glue.h>
+#include <media/NdkImage.h>
 
 #include "camera_manager.hpp"
+#include "image_reader.hpp"
 
 /**
  * basic CameraAppEngine
@@ -41,7 +43,7 @@ class CameraEngine {
     void CreateCamera(void);
     void DeleteCamera(void);
 
-    ImageReader* getWatImageReader() const noexcept;
+    camera::ImageReader* getWatImageReader() const noexcept;
 
   private:
     //    void OnPhotoTaken(const char* fileName);
@@ -53,9 +55,9 @@ class CameraEngine {
     int rotation_;
     volatile bool cameraReady_;
     NDKCamera* camera_;
-    ImageReader* yuvReader_;
-    ImageReader* watReader_;
-    ImageReader* jpgReader_;
+    camera::ImageReader* yuvReader_;
+    camera::ImageReader* watReader_;
+    camera::ImageReader* jpgReader_;
 };
 
 /**

@@ -59,14 +59,14 @@ void CameraEngine::CreateCamera(void) {
         rotation_,
         imageRotation
     );
-    ImageFormat view{1920, 1080, 0}, capture{0, 0, 0}, wat{1080, 1920, 0};
+    // ImageFormat view{1920, 1080, 0}, capture{0, 0, 0}, wat{1080, 1920, 0};
     // camera_->MatchCaptureSizeRequest(app_->window, &view, &capture);
 
-    logAssert(
-        view.width && view.height, "Could not find supportable resolution"
-    );
+    // logAssert(
+    //     view.width && view.height, "Could not find supportable resolution"
+    // );
 
-    logI("Selected camera preview w = %i, h = %i", view.width, view.height);
+    // logI("Selected camera preview w = %i, h = %i", view.width, view.height);
 
     // Request the necessary nativeWindow to OS
     bool portraitNativeWindow =
@@ -76,10 +76,8 @@ void CameraEngine::CreateCamera(void) {
     //        portraitNativeWindow ? view.width : view.height,
     //        WINDOW_FORMAT_RGBA_8888);
 
-    yuvReader_ = new ImageReader(&view, AIMAGE_FORMAT_YUV_420_888);
-    yuvReader_->SetPresentRotation(imageRotation);
-    watReader_ = new ImageReader(&wat, AIMAGE_FORMAT_RGBA_8888);
-    watReader_->SetPresentRotation(imageRotation);
+    yuvReader_ = new camera::ImageReader(1920, 1080, AIMAGE_FORMAT_YUV_420_888);
+    watReader_ = new camera::ImageReader(1080, 1920, AIMAGE_FORMAT_RGBA_8888);
     //    jpgReader_ = new ImageReader(&capture, AIMAGE_FORMAT_JPEG);
     //    jpgReader_->SetPresentRotation(imageRotation);
     //    jpgReader_->RegisterCallback(this, [](void* ctx, const char* str) ->
@@ -89,7 +87,7 @@ void CameraEngine::CreateCamera(void) {
 
     // now we could create session
     camera_->CreateSession(
-        yuvReader_->GetNativeWindow(),
+        yuvReader_->getNativeWindow(),
         /*jpgReader_->GetNativeWindow(),*/ imageRotation
     );
 }
@@ -114,7 +112,7 @@ void CameraEngine::DeleteCamera(void) {
     }
 }
 
-ImageReader* CameraEngine::getWatImageReader() const noexcept {
+camera::ImageReader* CameraEngine::getWatImageReader() const noexcept {
     return watReader_;
 }
 
@@ -156,7 +154,7 @@ ImageReader* CameraEngine::getWatImageReader() const noexcept {
  */
 void CameraEngine::DrawFrame(void) {
     if (!cameraReady_ || !yuvReader_) return;
-    AImage* image = yuvReader_->GetNextImage();
+    AImage* image = yuvReader_->getNextImage();
     if (!image) {
         return;
     }
@@ -177,7 +175,7 @@ void CameraEngine::DrawFrame(void) {
 
 AHardwareBuffer* CameraEngine::getNextHwBuffer() {
     if (!cameraReady_ || !yuvReader_) return nullptr;
-    AImage* image = yuvReader_->GetLatestImage();
+    AImage* image = yuvReader_->getLatestImage();
     if (!image) {
         return nullptr;
     }
@@ -199,14 +197,14 @@ AHardwareBuffer* CameraEngine::getNextHwBuffer() {
 
 AImage* CameraEngine::getNextCamImage() {
     if (!cameraReady_ || !yuvReader_) return nullptr;
-    AImage* image = yuvReader_->GetNextImage();
+    AImage* image = yuvReader_->getNextImage();
     if (!image) return nullptr;
     return image;
 }
 
 AImage* CameraEngine::getNextWatImage() {
     if (!watReader_) return nullptr;
-    AImage* image = watReader_->GetNextImage();
+    AImage* image = watReader_->getNextImage();
     if (!image) return nullptr;
     return image;
 }

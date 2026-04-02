@@ -160,67 +160,67 @@ class DisplayDimension {
  *    2) the smallest resolution in the camera mode list
  * This is to minimize the later color space conversion workload.
  */
-bool NDKCamera::MatchCaptureSizeRequest(
-    ANativeWindow* display, ImageFormat* resView, ImageFormat* resCap
-) {
-    DisplayDimension disp(
-        ANativeWindow_getWidth(display), ANativeWindow_getHeight(display)
-    );
-    if (cameraOrientation_ == 90 || cameraOrientation_ == 270) {
-        disp.Flip();
-    }
-
-    ACameraMetadata* metadata;
-    callCamera(ACameraManager_getCameraCharacteristics(
-        cameraMgr_, activeCameraId_.c_str(), &metadata
-    ));
-    ACameraMetadata_const_entry entry;
-    callCamera(ACameraMetadata_getConstEntry(
-        metadata, ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS, &entry
-    ));
-    // format of the data: format, width, height, input?, type int32
-    bool foundIt = false;
-    DisplayDimension foundRes(4000, 4000);
-    DisplayDimension maxJPG(0, 0);
-
-    for (uint32_t i = 0; i < entry.count; i += 4) {
-        int32_t input = entry.data.i32[i + 3];
-        int32_t format = entry.data.i32[i + 0];
-        if (input) continue;
-
-        if (format == AIMAGE_FORMAT_YUV_420_888 ||
-            format == AIMAGE_FORMAT_JPEG) {
-            DisplayDimension res(entry.data.i32[i + 1], entry.data.i32[i + 2]);
-            if (!disp.IsSameRatio(res)) continue;
-            if (format == AIMAGE_FORMAT_YUV_420_888 && foundRes > res) {
-                foundIt = true;
-                foundRes = res;
-            } else if (format == AIMAGE_FORMAT_JPEG && res > maxJPG) {
-                maxJPG = res;
-            }
-        }
-    }
-
-    if (foundIt) {
-        resView->width = foundRes.org_width();
-        resView->height = foundRes.org_height();
-        resCap->width = maxJPG.org_width();
-        resCap->height = maxJPG.org_height();
-    } else {
-        logW("Did not find any compatible camera resolution, taking 640x480");
-        if (disp.IsPortrait()) {
-            resView->width = 480;
-            resView->height = 640;
-        } else {
-            resView->width = 640;
-            resView->height = 480;
-        }
-        *resCap = *resView;
-    }
-    resView->format = AIMAGE_FORMAT_YUV_420_888;
-    resCap->format = AIMAGE_FORMAT_JPEG;
-    return foundIt;
-}
+// bool NDKCamera::MatchCaptureSizeRequest(
+//     ANativeWindow* display, ImageFormat* resView, ImageFormat* resCap
+// ) {
+//     DisplayDimension disp(
+//         ANativeWindow_getWidth(display), ANativeWindow_getHeight(display)
+//     );
+//     if (cameraOrientation_ == 90 || cameraOrientation_ == 270) {
+//         disp.Flip();
+//     }
+//
+//     ACameraMetadata* metadata;
+//     callCamera(ACameraManager_getCameraCharacteristics(
+//         cameraMgr_, activeCameraId_.c_str(), &metadata
+//     ));
+//     ACameraMetadata_const_entry entry;
+//     callCamera(ACameraMetadata_getConstEntry(
+//         metadata, ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS, &entry
+//     ));
+//     // format of the data: format, width, height, input?, type int32
+//     bool foundIt = false;
+//     DisplayDimension foundRes(4000, 4000);
+//     DisplayDimension maxJPG(0, 0);
+//
+//     for (uint32_t i = 0; i < entry.count; i += 4) {
+//         int32_t input = entry.data.i32[i + 3];
+//         int32_t format = entry.data.i32[i + 0];
+//         if (input) continue;
+//
+//         if (format == AIMAGE_FORMAT_YUV_420_888 ||
+//             format == AIMAGE_FORMAT_JPEG) {
+//             DisplayDimension res(entry.data.i32[i + 1], entry.data.i32[i +
+//             2]); if (!disp.IsSameRatio(res)) continue; if (format ==
+//             AIMAGE_FORMAT_YUV_420_888 && foundRes > res) {
+//                 foundIt = true;
+//                 foundRes = res;
+//             } else if (format == AIMAGE_FORMAT_JPEG && res > maxJPG) {
+//                 maxJPG = res;
+//             }
+//         }
+//     }
+//
+//     if (foundIt) {
+//         resView->width = foundRes.org_width();
+//         resView->height = foundRes.org_height();
+//         resCap->width = maxJPG.org_width();
+//         resCap->height = maxJPG.org_height();
+//     } else {
+//         logW("Did not find any compatible camera resolution, taking
+//         640x480"); if (disp.IsPortrait()) {
+//             resView->width = 480;
+//             resView->height = 640;
+//         } else {
+//             resView->width = 640;
+//             resView->height = 480;
+//         }
+//         *resCap = *resView;
+//     }
+//     resView->format = AIMAGE_FORMAT_YUV_420_888;
+//     resCap->format = AIMAGE_FORMAT_JPEG;
+//     return foundIt;
+// }
 
 void NDKCamera::CreateSession(
     ANativeWindow* previewWindow,

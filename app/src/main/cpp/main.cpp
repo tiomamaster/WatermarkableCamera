@@ -6,7 +6,6 @@
 
 #include "camera_engine.hpp"
 #include "hellovk.hpp"
-#include "image_reader.hpp"
 
 struct AppState {
     android_app* androidApp = nullptr;
@@ -129,8 +128,8 @@ void drawFrame(AImage* image, bool isCam) {
 
 jobject getWatermarkSurface(JNIEnv* env, jobject) {
     logI("getWatermarkSurface called");
-    ImageReader* ir = camEng->getWatImageReader();
-    ANativeWindow* nativeWindow = ir->GetNativeWindow();
+    camera::ImageReader* ir = camEng->getWatImageReader();
+    ANativeWindow* nativeWindow = ir->getNativeWindow();
     jobject surface = ANativeWindow_toSurface(env, nativeWindow);
     return surface;
 }

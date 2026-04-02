@@ -10,8 +10,6 @@
 #include <string>
 #include <vector>
 
-#include "image_reader.hpp"
-
 enum class CaptureSessionState : int32_t {
     READY = 0,  // session is ready
     ACTIVE,     // session is busy
@@ -81,9 +79,9 @@ class NDKCamera {
     NDKCamera();
     ~NDKCamera();
     void EnumerateCamera(void);
-    bool MatchCaptureSizeRequest(
-        ANativeWindow* display, ImageFormat* view, ImageFormat* capture
-    );
+    // bool MatchCaptureSizeRequest(
+    //     ANativeWindow* display, ImageFormat* view, ImageFormat* capture
+    // );
     void CreateSession(
         ANativeWindow* previewWindow, /*ANativeWindow* jpgWindow,*/
         int32_t imageRotation
