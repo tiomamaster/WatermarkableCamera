@@ -56,9 +56,9 @@ class VkCameraActivity : GameActivity() {
 
         Handler(mainLooper).postDelayed({
             setupWatermark()
-            val filename = "${System.currentTimeMillis()}.mp4"
-            val dir = /*getExternalFilesDir(null)*/"/sdcard/DCIM/Camera"
-            initRecorder(File("$dir/$filename"), 720, 1280, 0)
+//            val filename = "${System.currentTimeMillis()}.mp4"
+//            val dir = /*getExternalFilesDir(null)*/"/sdcard/DCIM/Camera"
+//            initRecorder(File("$dir/$filename"), 720, 1280, 0)
             setMediaSurface(mediaSurface)
         }, 1000)
 
@@ -199,7 +199,8 @@ class VkCameraActivity : GameActivity() {
     // onBackPressed is deprecated.
     override fun onBackPressed() {
         System.gc()
-        exitProcess(0)
+        super.onBackPressed()
+//        exitProcess(0)
     }
 
     private external fun getWatermarkSurface(): Surface

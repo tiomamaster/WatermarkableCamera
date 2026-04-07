@@ -4,288 +4,142 @@
 #include <camera/NdkCameraManager.h>
 #include <unistd.h>
 
-#include <utility>
-
 #include "util.hpp"
 
 using namespace camera::util;
 
-/**
- * Range of Camera Exposure Time:
- *     Camera's capability range have a very long range which may be disturbing
- *     on camera. For this sample purpose, clamp to a range showing visible
- *     video on preview: 100000ns ~ 250000000ns
- */
-static const int64_t kMinExposureTime = 1000000;
-static const int64_t kMaxExposureTime = 250000000;
+void onDisconnected(void* ctx, ACameraDevice* dev) {
+    reinterpret_cast<CameraManager*>(ctx)->onDisconnected(dev);
+}
 
-NDKCamera::NDKCamera()
+void onError(void* ctx, ACameraDevice* dev, int err) {
+    reinterpret_cast<CameraManager*>(ctx)->onError(dev, err);
+}
+
+void CameraManager::onDisconnected(ACameraDevice* dev) {
+    std::string id(ACameraDevice_getId(dev));
+    logW("device %s is disconnected", id.c_str());
+
+    cameras_[id].available_ = false;
+    ACameraDevice_close(cameras_[id].device_);
+    cameras_.erase(id);
+}
+
+void CameraManager::onError(ACameraDevice* dev, int err) {
+    std::string id(ACameraDevice_getId(dev));
+
+    logI("CameraDevice %s is in error %#x", id.c_str(), err);
+    printCameraDeviceError(err);
+
+    CameraId& cam = cameras_[id];
+
+    switch (err) {
+        case ERROR_CAMERA_IN_USE:
+        case ERROR_CAMERA_SERVICE:
+        case ERROR_CAMERA_DEVICE:
+        case ERROR_CAMERA_DISABLED:
+        case ERROR_MAX_CAMERAS_IN_USE:
+            cam.available_ = false;
+            cam.owner_ = false;
+            break;
+        default:
+            logI("Unknown Camera Device Error: %#x", err);
+    }
+}
+
+void onCameraAvailable(void* ctx, const char* id) {
+    reinterpret_cast<CameraManager*>(ctx)->onCameraStatusChanged(id, true);
+}
+
+void onCameraUnavailable(void* ctx, const char* id) {
+    reinterpret_cast<CameraManager*>(ctx)->onCameraStatusChanged(id, false);
+}
+
+void CameraManager::onCameraStatusChanged(const char* id, bool available) {
+    if (valid_) cameras_[std::string(id)].available_ = available;
+}
+
+void onSessionClosed(void* ctx, ACameraCaptureSession* ses) {
+    logW("session %p closed", ses);
+    reinterpret_cast<CameraManager*>(ctx)->onSessionState(
+        ses, CaptureSessionState::CLOSED
+    );
+}
+
+void onSessionReady(void* ctx, ACameraCaptureSession* ses) {
+    logW("session %p ready", ses);
+    reinterpret_cast<CameraManager*>(ctx)->onSessionState(
+        ses, CaptureSessionState::READY
+    );
+}
+
+void onSessionActive(void* ctx, ACameraCaptureSession* ses) {
+    logW("session %p active", ses);
+    reinterpret_cast<CameraManager*>(ctx)->onSessionState(
+        ses, CaptureSessionState::ACTIVE
+    );
+}
+
+void CameraManager::onSessionState(
+    ACameraCaptureSession* ses, CaptureSessionState state
+) {
+    if (!ses || ses != captureSession_) {
+        logW("CaptureSession is %s", (ses ? "NOT our session" : "NULL"));
+        return;
+    }
+
+    logAssert(state < CaptureSessionState::MAX_STATE, "wrong session state");
+
+    captureSessionState_ = state;
+}
+
+CameraManager::CameraManager(ANativeWindow* previewWindow)
     : cameraMgr_(nullptr),
       activeCameraId_(""),
       cameraFacing_(ACAMERA_LENS_FACING_BACK),
       cameraOrientation_(0),
       outputContainer_(nullptr),
-      captureSessionState_(CaptureSessionState::MAX_STATE),
-      exposureTime_(static_cast<int64_t>(0)) {
+      captureSessionState_(CaptureSessionState::MAX_STATE) {
     valid_ = false;
     requests_.resize(/*CAPTURE_REQUEST_COUNT*/ 1);
     memset(requests_.data(), 0, requests_.size() * sizeof(requests_[0]));
     cameras_.clear();
     cameraMgr_ = ACameraManager_create();
-    logAssert(cameraMgr_, "Failed to create cameraManager");
+    logAssert(cameraMgr_, "failed to create cameraManager");
 
     // Pick up a back-facing camera to preview
-    EnumerateCamera();
-    logAssert(activeCameraId_.size(), "Unknown ActiveCameraIdx");
+    enumerateCameras();
+    logAssert(activeCameraId_.size(), "unknown ActiveCameraIdx");
 
     // Create back facing camera device
+    static ACameraDevice_StateCallbacks cameraDeviceListener = {
+        .context = this,
+        .onDisconnected = ::onDisconnected,
+        .onError = ::onError
+    };
     callCamera(ACameraManager_openCamera(
         cameraMgr_,
         activeCameraId_.c_str(),
-        GetDeviceListener(),
+        &cameraDeviceListener,
         &cameras_[activeCameraId_].device_
     ));
 
+    static ACameraManager_AvailabilityCallbacks callbacks{
+        .context = this,
+        .onCameraAvailable = ::onCameraAvailable,
+        .onCameraUnavailable = ::onCameraUnavailable,
+    };
+    cameraMgrListener = &callbacks;
     callCamera(ACameraManager_registerAvailabilityCallback(
-        cameraMgr_, GetManagerListener()
+        cameraMgr_, cameraMgrListener
     ));
 
-    // Initialize camera controls(exposure time and sensitivity), pick
-    // up value of 2% * range + min as starting value (just a number, no magic)
-    ACameraMetadata* metadataObj;
-    callCamera(ACameraManager_getCameraCharacteristics(
-        cameraMgr_, activeCameraId_.c_str(), &metadataObj
-    ));
-    ACameraMetadata_const_entry val = {};
-    camera_status_t status = ACameraMetadata_getConstEntry(
-        metadataObj, ACAMERA_SENSOR_INFO_EXPOSURE_TIME_RANGE, &val
-    );
-    if (status == ACAMERA_OK) {
-        exposureRange_.min_ = val.data.i64[0];
-        if (exposureRange_.min_ < kMinExposureTime) {
-            exposureRange_.min_ = kMinExposureTime;
-        }
-        exposureRange_.max_ = val.data.i64[1];
-        if (exposureRange_.max_ > kMaxExposureTime) {
-            exposureRange_.max_ = kMaxExposureTime;
-        }
-        exposureTime_ = exposureRange_.value(2);
-    } else {
-        logW("Unsupported ACAMERA_SENSOR_INFO_EXPOSURE_TIME_RANGE");
-        exposureRange_.min_ = exposureRange_.max_ = 0l;
-        exposureTime_ = 0l;
-    }
-    status = ACameraMetadata_getConstEntry(
-        metadataObj, ACAMERA_SENSOR_INFO_SENSITIVITY_RANGE, &val
-    );
-
-    if (status == ACAMERA_OK) {
-        sensitivityRange_.min_ = val.data.i32[0];
-        sensitivityRange_.max_ = val.data.i32[1];
-
-        sensitivity_ = sensitivityRange_.value(2);
-    } else {
-        logW("failed for ACAMERA_SENSOR_INFO_SENSITIVITY_RANGE");
-        sensitivityRange_.min_ = sensitivityRange_.max_ = 0;
-        sensitivity_ = 0;
-    }
     valid_ = true;
+
+    createSession(previewWindow);
 }
 
-/**
- * A helper class to assist image size comparison, by comparing the absolute
- * size
- * regardless of the portrait or landscape mode.
- */
-class DisplayDimension {
-  public:
-    DisplayDimension(int32_t w, int32_t h) : w_(w), h_(h), portrait_(false) {
-        if (h > w) {
-            // make it landscape
-            w_ = h;
-            h_ = w;
-            portrait_ = true;
-        }
-    }
-    DisplayDimension(const DisplayDimension& other) {
-        w_ = other.w_;
-        h_ = other.h_;
-        portrait_ = other.portrait_;
-    }
-
-    DisplayDimension(void) {
-        w_ = 0;
-        h_ = 0;
-        portrait_ = false;
-    }
-    DisplayDimension& operator=(const DisplayDimension& other) {
-        w_ = other.w_;
-        h_ = other.h_;
-        portrait_ = other.portrait_;
-
-        return (*this);
-    }
-
-    bool IsSameRatio(DisplayDimension& other) {
-        return (w_ * other.h_ == h_ * other.w_);
-    }
-    bool operator>(DisplayDimension& other) {
-        return (w_ >= other.w_ & h_ >= other.h_);
-    }
-    bool operator==(DisplayDimension& other) {
-        return (
-            w_ == other.w_ && h_ == other.h_ && portrait_ == other.portrait_
-        );
-    }
-    DisplayDimension operator-(DisplayDimension& other) {
-        DisplayDimension delta(w_ - other.w_, h_ - other.h_);
-        return delta;
-    }
-    void Flip(void) { portrait_ = !portrait_; }
-    bool IsPortrait(void) { return portrait_; }
-    int32_t width(void) { return w_; }
-    int32_t height(void) { return h_; }
-    int32_t org_width(void) { return (portrait_ ? h_ : w_); }
-    int32_t org_height(void) { return (portrait_ ? w_ : h_); }
-
-  private:
-    int32_t w_, h_;
-    bool portrait_;
-};
-
-/**
- * Find a compatible camera modes:
- *    1) the same aspect ration as the native display window, which should be a
- *       rotated version of the physical device
- *    2) the smallest resolution in the camera mode list
- * This is to minimize the later color space conversion workload.
- */
-// bool NDKCamera::MatchCaptureSizeRequest(
-//     ANativeWindow* display, ImageFormat* resView, ImageFormat* resCap
-// ) {
-//     DisplayDimension disp(
-//         ANativeWindow_getWidth(display), ANativeWindow_getHeight(display)
-//     );
-//     if (cameraOrientation_ == 90 || cameraOrientation_ == 270) {
-//         disp.Flip();
-//     }
-//
-//     ACameraMetadata* metadata;
-//     callCamera(ACameraManager_getCameraCharacteristics(
-//         cameraMgr_, activeCameraId_.c_str(), &metadata
-//     ));
-//     ACameraMetadata_const_entry entry;
-//     callCamera(ACameraMetadata_getConstEntry(
-//         metadata, ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS, &entry
-//     ));
-//     // format of the data: format, width, height, input?, type int32
-//     bool foundIt = false;
-//     DisplayDimension foundRes(4000, 4000);
-//     DisplayDimension maxJPG(0, 0);
-//
-//     for (uint32_t i = 0; i < entry.count; i += 4) {
-//         int32_t input = entry.data.i32[i + 3];
-//         int32_t format = entry.data.i32[i + 0];
-//         if (input) continue;
-//
-//         if (format == AIMAGE_FORMAT_YUV_420_888 ||
-//             format == AIMAGE_FORMAT_JPEG) {
-//             DisplayDimension res(entry.data.i32[i + 1], entry.data.i32[i +
-//             2]); if (!disp.IsSameRatio(res)) continue; if (format ==
-//             AIMAGE_FORMAT_YUV_420_888 && foundRes > res) {
-//                 foundIt = true;
-//                 foundRes = res;
-//             } else if (format == AIMAGE_FORMAT_JPEG && res > maxJPG) {
-//                 maxJPG = res;
-//             }
-//         }
-//     }
-//
-//     if (foundIt) {
-//         resView->width = foundRes.org_width();
-//         resView->height = foundRes.org_height();
-//         resCap->width = maxJPG.org_width();
-//         resCap->height = maxJPG.org_height();
-//     } else {
-//         logW("Did not find any compatible camera resolution, taking
-//         640x480"); if (disp.IsPortrait()) {
-//             resView->width = 480;
-//             resView->height = 640;
-//         } else {
-//             resView->width = 640;
-//             resView->height = 480;
-//         }
-//         *resCap = *resView;
-//     }
-//     resView->format = AIMAGE_FORMAT_YUV_420_888;
-//     resCap->format = AIMAGE_FORMAT_JPEG;
-//     return foundIt;
-// }
-
-void NDKCamera::CreateSession(
-    ANativeWindow* previewWindow,
-    /*ANativeWindow* jpgWindow,*/ int32_t imageRotation
-) {
-    // Create output from this app's ANativeWindow, and add into output
-    // container
-    requests_[PREVIEW_REQUEST_IDX].outputNativeWindow_ = previewWindow;
-    requests_[PREVIEW_REQUEST_IDX].template_ = TEMPLATE_RECORD;
-    //    requests_[JPG_CAPTURE_REQUEST_IDX].outputNativeWindow_ = jpgWindow;
-    //    requests_[JPG_CAPTURE_REQUEST_IDX].template_ = TEMPLATE_STILL_CAPTURE;
-
-    callCamera(ACaptureSessionOutputContainer_create(&outputContainer_));
-    for (auto& req : requests_) {
-        ANativeWindow_acquire(req.outputNativeWindow_);
-        callCamera(ACaptureSessionOutput_create(
-            req.outputNativeWindow_, &req.sessionOutput_
-        ));
-        callCamera(ACaptureSessionOutputContainer_add(
-            outputContainer_, req.sessionOutput_
-        ));
-        callCamera(
-            ACameraOutputTarget_create(req.outputNativeWindow_, &req.target_)
-        );
-        callCamera(ACameraDevice_createCaptureRequest(
-            cameras_[activeCameraId_].device_, req.template_, &req.request_
-        ));
-        callCamera(ACaptureRequest_addTarget(req.request_, req.target_));
-    }
-
-    // Create a capture session for the given preview request
-    captureSessionState_ = CaptureSessionState::READY;
-    callCamera(ACameraDevice_createCaptureSession(
-        cameras_[activeCameraId_].device_,
-        outputContainer_,
-        GetSessionListener(),
-        &captureSession_
-    ));
-
-    //    ACaptureRequest_setEntry_i32(requests_[JPG_CAPTURE_REQUEST_IDX].request_,
-    //                                 ACAMERA_JPEG_ORIENTATION, 1,
-    //                                 &imageRotation);
-
-    /*
-     * Only preview request is in manual mode, JPG is always in Auto mode
-     * JPG capture mode could also be switch into manual mode and control
-     * the capture parameters, this sample leaves JPG capture to be auto mode
-     * (auto control has better effect than author's manual control)
-     */
-    uint8_t aeModeOff = ACAMERA_CONTROL_AE_MODE_ON;
-    callCamera(ACaptureRequest_setEntry_u8(
-        requests_[PREVIEW_REQUEST_IDX].request_,
-        ACAMERA_CONTROL_AE_MODE,
-        1,
-        &aeModeOff
-    ));
-    //    callCamera(ACaptureRequest_setEntry_i32(requests_[PREVIEW_REQUEST_IDX].request_,
-    //                              ACAMERA_SENSOR_SENSITIVITY, 1,
-    //                              &sensitivity_));
-    //    callCamera(ACaptureRequest_setEntry_i64(requests_[PREVIEW_REQUEST_IDX].request_,
-    //                              ACAMERA_SENSOR_EXPOSURE_TIME, 1,
-    //                              &exposureTime_));
-}
-
-NDKCamera::~NDKCamera() {
+CameraManager::~CameraManager() {
     valid_ = false;
     // stop session if it is on:
     if (captureSessionState_ == CaptureSessionState::ACTIVE) {
@@ -317,20 +171,14 @@ NDKCamera::~NDKCamera() {
     cameras_.clear();
     if (cameraMgr_) {
         callCamera(ACameraManager_unregisterAvailabilityCallback(
-            cameraMgr_, GetManagerListener()
+            cameraMgr_, cameraMgrListener
         ));
         ACameraManager_delete(cameraMgr_);
         cameraMgr_ = nullptr;
     }
 }
 
-/**
- * EnumerateCamera()
- *     Loop through cameras on the system, pick up
- *     1) back facing one if available
- *     2) otherwise pick the first one reported to us
- */
-void NDKCamera::EnumerateCamera() {
+void CameraManager::enumerateCameras() {
     ACameraIdList* cameraIds = nullptr;
     callCamera(ACameraManager_getCameraIdList(cameraMgr_, &cameraIds));
 
@@ -368,7 +216,7 @@ void NDKCamera::EnumerateCamera() {
         ACameraMetadata_free(metadataObj);
     }
 
-    logAssert(!cameras_.empty(), "No Camera Available on the device");
+    logAssert(!cameras_.empty(), "no camera available on the device");
     if (activeCameraId_.empty()) {
         // if no back facing camera found, pick up the first one to use...
         activeCameraId_ = cameras_.begin()->second.id_;
@@ -376,13 +224,55 @@ void NDKCamera::EnumerateCamera() {
     ACameraManager_deleteCameraIdList(cameraIds);
 }
 
-/**
- * GetSensorOrientation()
- *     Retrieve current sensor orientation regarding to the phone device
- * orientation
- *     SensorOrientation is NOT settable.
- */
-bool NDKCamera::GetSensorOrientation(int32_t* facing, int32_t* angle) {
+void CameraManager::createSession(ANativeWindow* previewWindow) {
+    // Create output from this app's ANativeWindow, and add into output
+    // container
+    requests_[PREVIEW_REQUEST_IDX].outputNativeWindow_ = previewWindow;
+    requests_[PREVIEW_REQUEST_IDX].template_ = TEMPLATE_RECORD;
+
+    callCamera(ACaptureSessionOutputContainer_create(&outputContainer_));
+    for (auto& req : requests_) {
+        ANativeWindow_acquire(req.outputNativeWindow_);
+        callCamera(ACaptureSessionOutput_create(
+            req.outputNativeWindow_, &req.sessionOutput_
+        ));
+        callCamera(ACaptureSessionOutputContainer_add(
+            outputContainer_, req.sessionOutput_
+        ));
+        callCamera(
+            ACameraOutputTarget_create(req.outputNativeWindow_, &req.target_)
+        );
+        callCamera(ACameraDevice_createCaptureRequest(
+            cameras_[activeCameraId_].device_, req.template_, &req.request_
+        ));
+        callCamera(ACaptureRequest_addTarget(req.request_, req.target_));
+    }
+
+    // Create a capture session for the given preview request
+    captureSessionState_ = CaptureSessionState::READY;
+    static ACameraCaptureSession_stateCallbacks sessionListener = {
+        .context = this,
+        .onClosed = ::onSessionClosed,
+        .onReady = ::onSessionReady,
+        .onActive = ::onSessionActive,
+    };
+    callCamera(ACameraDevice_createCaptureSession(
+        cameras_[activeCameraId_].device_,
+        outputContainer_,
+        &sessionListener,
+        &captureSession_
+    ));
+
+    uint8_t aeModeOn = ACAMERA_CONTROL_AE_MODE_ON;
+    callCamera(ACaptureRequest_setEntry_u8(
+        requests_[PREVIEW_REQUEST_IDX].request_,
+        ACAMERA_CONTROL_AE_MODE,
+        1,
+        &aeModeOn
+    ));
+}
+
+bool CameraManager::getSensorOrientation(int32_t* facing, int32_t* angle) {
     if (!cameraMgr_) {
         return false;
     }
@@ -411,11 +301,7 @@ bool NDKCamera::GetSensorOrientation(int32_t* facing, int32_t* angle) {
     return true;
 }
 
-/**
- * StartPreview()
- *   Toggle preview start/stop
- */
-void NDKCamera::StartPreview(bool start) {
+void CameraManager::startPreview(bool start) {
     if (start) {
         callCamera(ACameraCaptureSession_setRepeatingRequest(
             captureSession_,
@@ -429,105 +315,4 @@ void NDKCamera::StartPreview(bool start) {
     } else {
         logAssert(false, "conflict states");
     }
-}
-
-/**
- * Capture one jpg photo into
- *     /sdcard/DCIM/Camera
- * refer to WriteFile() for details
- */
-bool NDKCamera::TakePhoto(void) {
-    if (captureSessionState_ == CaptureSessionState::ACTIVE) {
-        ACameraCaptureSession_stopRepeating(captureSession_);
-    }
-
-    callCamera(ACameraCaptureSession_capture(
-        captureSession_,
-        GetCaptureCallback(),
-        1,
-        &requests_[JPG_CAPTURE_REQUEST_IDX].request_,
-        &requests_[JPG_CAPTURE_REQUEST_IDX].sessionSequenceId_
-    ));
-    return true;
-}
-
-void NDKCamera::UpdateCameraRequestParameter(int32_t code, int64_t val) {
-    ACaptureRequest* request = requests_[PREVIEW_REQUEST_IDX].request_;
-    switch (code) {
-        case ACAMERA_SENSOR_EXPOSURE_TIME:
-            if (exposureRange_.Supported()) {
-                exposureTime_ = val;
-                callCamera(ACaptureRequest_setEntry_i64(
-                    request, ACAMERA_SENSOR_EXPOSURE_TIME, 1, &exposureTime_
-                ));
-            }
-            break;
-
-        case ACAMERA_SENSOR_SENSITIVITY:
-            if (sensitivityRange_.Supported()) {
-                sensitivity_ = val;
-                callCamera(ACaptureRequest_setEntry_i32(
-                    request, ACAMERA_SENSOR_SENSITIVITY, 1, &sensitivity_
-                ));
-            }
-            break;
-        default:
-            logAssert(false, "wrong code for CameraParameterChange");
-            return;
-    }
-
-    uint8_t aeModeOff = ACAMERA_CONTROL_AE_MODE_OFF;
-    callCamera(ACaptureRequest_setEntry_u8(
-        request, ACAMERA_CONTROL_AE_MODE, 1, &aeModeOff
-    ));
-    callCamera(ACameraCaptureSession_setRepeatingRequest(
-        captureSession_,
-        nullptr,
-        1,
-        &request,
-        &requests_[PREVIEW_REQUEST_IDX].sessionSequenceId_
-    ));
-}
-
-/**
- * Retrieve Camera Exposure adjustable range.
- *
- * @param min Camera minimium exposure time in nanoseconds
- * @param max Camera maximum exposure tiem in nanoseconds
- *
- * @return true  min and max are loaded with the camera's exposure values
- *         false camera has not initialized, no value available
- */
-bool NDKCamera::GetExposureRange(int64_t* min, int64_t* max, int64_t* curVal) {
-    if (!exposureRange_.Supported() || !exposureTime_ || !min || !max ||
-        !curVal) {
-        return false;
-    }
-    *min = exposureRange_.min_;
-    *max = exposureRange_.max_;
-    *curVal = exposureTime_;
-
-    return true;
-}
-
-/**
- * Retrieve Camera sensitivity range.
- *
- * @param min Camera minimium sensitivity
- * @param max Camera maximum sensitivity
- *
- * @return true  min and max are loaded with the camera's sensitivity values
- *         false camera has not initialized, no value available
- */
-bool NDKCamera::GetSensitivityRange(
-    int64_t* min, int64_t* max, int64_t* curVal
-) {
-    if (!sensitivityRange_.Supported() || !sensitivity_ || !min || !max ||
-        !curVal) {
-        return false;
-    }
-    *min = static_cast<int64_t>(sensitivityRange_.min_);
-    *max = static_cast<int64_t>(sensitivityRange_.max_);
-    *curVal = sensitivity_;
-    return true;
 }

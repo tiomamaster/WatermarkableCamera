@@ -1,5 +1,4 @@
-#ifndef CAMERA_MANAGER_HPP
-#define CAMERA_MANAGER_HPP
+#pragma once
 
 #include <camera/NdkCameraDevice.h>
 #include <camera/NdkCameraError.h>
@@ -17,22 +16,6 @@ enum class CaptureSessionState : int32_t {
     MAX_STATE
 };
 
-template <typename T>
-class RangeValue {
-  public:
-    T min_, max_;
-    /**
-     * return absolute value from relative value
-     * value: in percent (50 for 50%)
-     */
-    T value(int percent) {
-        return static_cast<T>(min_ + (max_ - min_) * percent / 100);
-    }
-    RangeValue() { min_ = max_ = static_cast<T>(0); }
-
-    bool Supported(void) const { return (min_ != max_); }
-};
-
 enum PREVIEW_INDICES {
     PREVIEW_REQUEST_IDX = 0,
     JPG_CAPTURE_REQUEST_IDX,
@@ -48,8 +31,35 @@ struct CaptureRequestInfo {
     int sessionSequenceId_;
 };
 
-class CameraId;
-class NDKCamera {
+// helper classes to hold enumerated camera
+struct CameraId {
+    ACameraDevice* device_;
+    std::string id_;
+    acamera_metadata_enum_android_lens_facing_t facing_;
+    bool available_;  // free to use, no other apps are using
+    bool owner_;      // we are the owner of the camera
+
+    explicit CameraId(const char* id)
+        : device_(nullptr),
+          id_(id),
+          facing_(ACAMERA_LENS_FACING_FRONT),
+          available_(false),
+          owner_(false) {}
+
+    explicit CameraId() { CameraId(""); }
+};
+
+class CameraManager {
+  public:
+    CameraManager(ANativeWindow* previewWindow);
+    ~CameraManager();
+
+    void onCameraStatusChanged(const char* id, bool available);
+    void onDisconnected(ACameraDevice* dev);
+    void onError(ACameraDevice* dev, int err);
+    void onSessionState(ACameraCaptureSession* ses, CaptureSessionState state);
+    void startPreview(bool start);
+
   private:
     ACameraManager* cameraMgr_;
     std::map<std::string, CameraId> cameras_;
@@ -63,67 +73,11 @@ class NDKCamera {
     ACameraCaptureSession* captureSession_;
     CaptureSessionState captureSessionState_;
 
-    // set up exposure control
-    int64_t exposureTime_;
-    RangeValue<int64_t> exposureRange_;
-    int32_t sensitivity_;
-    RangeValue<int32_t> sensitivityRange_;
+    ACameraManager_AvailabilityCallbacks* cameraMgrListener;
+
     volatile bool valid_;
 
-    ACameraManager_AvailabilityCallbacks* GetManagerListener();
-    ACameraDevice_stateCallbacks* GetDeviceListener();
-    ACameraCaptureSession_stateCallbacks* GetSessionListener();
-    ACameraCaptureSession_captureCallbacks* GetCaptureCallback();
-
-  public:
-    NDKCamera();
-    ~NDKCamera();
-    void EnumerateCamera(void);
-    // bool MatchCaptureSizeRequest(
-    //     ANativeWindow* display, ImageFormat* view, ImageFormat* capture
-    // );
-    void CreateSession(
-        ANativeWindow* previewWindow, /*ANativeWindow* jpgWindow,*/
-        int32_t imageRotation
-    );
-    bool GetSensorOrientation(int32_t* facing, int32_t* angle);
-    void OnCameraStatusChanged(const char* id, bool available);
-    void OnDeviceState(ACameraDevice* dev);
-    void OnDeviceError(ACameraDevice* dev, int err);
-    void OnSessionState(ACameraCaptureSession* ses, CaptureSessionState state);
-    void OnCaptureSequenceEnd(
-        ACameraCaptureSession* session, int sequenceId, int64_t frameNumber
-    );
-    void OnCaptureFailed(
-        ACameraCaptureSession* session,
-        ACaptureRequest* request,
-        ACameraCaptureFailure* failure
-    );
-    void StartPreview(bool start);
-    bool TakePhoto(void);
-    bool GetExposureRange(int64_t* min, int64_t* max, int64_t* curVal);
-    bool GetSensitivityRange(int64_t* min, int64_t* max, int64_t* curVal);
-
-    void UpdateCameraRequestParameter(int32_t code, int64_t val);
+    void enumerateCameras();
+    void createSession(ANativeWindow* previewWindow);
+    bool getSensorOrientation(int32_t* facing, int32_t* angle);
 };
-
-// helper classes to hold enumerated camera
-class CameraId {
-  public:
-    ACameraDevice* device_;
-    std::string id_;
-    acamera_metadata_enum_android_lens_facing_t facing_;
-    bool available_;  // free to use ( no other apps are using
-    bool owner_;      // we are the owner of the camera
-    explicit CameraId(const char* id)
-        : device_(nullptr),
-          facing_(ACAMERA_LENS_FACING_FRONT),
-          available_(false),
-          owner_(false) {
-        id_ = id;
-    }
-
-    explicit CameraId(void) { CameraId(""); }
-};
-
-#endif  // CAMERA_MANAGER_HPP

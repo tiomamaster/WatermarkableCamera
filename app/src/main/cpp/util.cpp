@@ -341,18 +341,13 @@ void printTagVal(const char* printLabel, ACameraMetadata_const_entry& val) {
                 logI("%s %s: %#02x", printLabel, name, val.data.u8[i]);
                 break;
             case ACAMERA_TYPE_INT64:
-                logI(
-                    "%s %s: %" PRIu64,
-                    printLabel,
-                    name,
-                    (int64_t)val.data.i64[i]
-                );
+                logI("%s %s: %", printLabel, name, (int64_t)val.data.i64[i]);
                 break;
             case ACAMERA_TYPE_FLOAT:
                 logI("%s %s: %f", printLabel, name, val.data.f[i]);
                 break;
             case ACAMERA_TYPE_DOUBLE:
-                logI("%s %s: %" PRIx64, printLabel, name, val.data.i64[i]);
+                logI("%s %s: %", printLabel, name, val.data.i64[i]);
                 break;
             case ACAMERA_TYPE_RATIONAL:
                 logI(
@@ -433,17 +428,13 @@ void printRequestMetadata(ACaptureRequest* req) {
                     logI("Capture Tag %s: %#08x", name, val.data.u8[i]);
                     break;
                 case ACAMERA_TYPE_INT64:
-                    logI(
-                        "Capture Tag %s: %" PRIu64,
-                        name,
-                        (int64_t)val.data.i64[i]
-                    );
+                    logI("Capture Tag %s: %", name, (int64_t)val.data.i64[i]);
                     break;
                 case ACAMERA_TYPE_FLOAT:
                     logI("Capture Tag %s: %f", name, val.data.f[i]);
                     break;
                 case ACAMERA_TYPE_DOUBLE:
-                    logI("Capture Tag %s: %" PRIx64, name, val.data.i64[i]);
+                    logI("Capture Tag %s: %", name, val.data.i64[i]);
                     break;
                 case ACAMERA_TYPE_RATIONAL:
                     logI(

@@ -3,15 +3,6 @@
 #include <media/NdkImageReader.h>
 
 #include <cstdint>
-#include <functional>
-
-// TODO: remove
-struct ImageFormat {
-    int32_t width;
-    int32_t height;
-
-    int32_t format;
-};
 
 namespace camera {
 
