@@ -8,6 +8,8 @@
 
 using namespace camera::util;
 
+namespace camera {
+
 void onDisconnected(void* ctx, ACameraDevice* dev) {
     reinterpret_cast<CameraManager*>(ctx)->onDisconnected(dev);
 }
@@ -114,8 +116,8 @@ CameraManager::CameraManager(ANativeWindow* previewWindow)
     // Create back facing camera device
     static ACameraDevice_StateCallbacks cameraDeviceListener = {
         .context = this,
-        .onDisconnected = ::onDisconnected,
-        .onError = ::onError
+        .onDisconnected = ::camera::onDisconnected,
+        .onError = ::camera::onError
     };
     callCamera(ACameraManager_openCamera(
         cameraMgr_,
@@ -126,8 +128,8 @@ CameraManager::CameraManager(ANativeWindow* previewWindow)
 
     static ACameraManager_AvailabilityCallbacks callbacks{
         .context = this,
-        .onCameraAvailable = ::onCameraAvailable,
-        .onCameraUnavailable = ::onCameraUnavailable,
+        .onCameraAvailable = ::camera::onCameraAvailable,
+        .onCameraUnavailable = ::camera::onCameraUnavailable,
     };
     cameraMgrListener = &callbacks;
     callCamera(ACameraManager_registerAvailabilityCallback(
@@ -252,9 +254,9 @@ void CameraManager::createSession(ANativeWindow* previewWindow) {
     captureSessionState_ = CaptureSessionState::READY;
     static ACameraCaptureSession_stateCallbacks sessionListener = {
         .context = this,
-        .onClosed = ::onSessionClosed,
-        .onReady = ::onSessionReady,
-        .onActive = ::onSessionActive,
+        .onClosed = ::camera::onSessionClosed,
+        .onReady = ::camera::onSessionReady,
+        .onActive = ::camera::onSessionActive,
     };
     callCamera(ACameraDevice_createCaptureSession(
         cameras_[activeCameraId_].device_,
@@ -316,3 +318,5 @@ void CameraManager::startPreview(bool start) {
         logAssert(false, "conflict states");
     }
 }
+
+}  // namespace camera

@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+namespace camera {
+
 enum class CaptureSessionState : int32_t {
     READY = 0,  // session is ready
     ACTIVE,     // session is busy
@@ -81,3 +83,5 @@ class CameraManager {
     void createSession(ANativeWindow* previewWindow);
     bool getSensorOrientation(int32_t* facing, int32_t* angle);
 };
+
+}  // namespace camera
