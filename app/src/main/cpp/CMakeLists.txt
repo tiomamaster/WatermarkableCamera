@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18.1)
-project(WatermarkableCameraJNI)
+project(VkWatCam)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -23,6 +23,8 @@ find_package(VulkanHpp REQUIRED)
 cpmaddpackage("gh:g-truc/glm#1.0.2")
 cpmaddpackage(NAME stb URL
               https://github.com/nothings/stb/archive/refs/heads/master.tar.gz)
+cpmaddpackage(NAME jni URL
+              https://github.com/mapbox/jni.hpp/archive/refs/tags/v4.0.1.tar.gz)
 
 # Now build app's shared lib
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -69,8 +71,9 @@ target_link_libraries(
          vulkan
          VulkanHpp::VulkanHpp
          glm)
-target_include_directories(${PROJECT_NAME}
-                           PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/_deps/stb-src)
+target_include_directories(
+  ${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/_deps/stb-src
+                         ${CMAKE_CURRENT_BINARY_DIR}/_deps/jni-src/include)
 add_slang_shader_target(main_slang_shader SOURCES
                         ${CMAKE_CURRENT_LIST_DIR}/shaders/tex.slang)
 add_dependencies(${PROJECT_NAME} main_slang_shader)

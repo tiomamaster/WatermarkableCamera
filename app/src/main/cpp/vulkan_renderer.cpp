@@ -1,6 +1,6 @@
 #include "vulkan_renderer.hpp"
 
-#include <vulkan/vulkan.hpp>
+#include <android/native_window.h>
 
 #include "util.hpp"
 
@@ -386,7 +386,7 @@ void VkRenderer::camHwBufferToTexture(AHardwareBuffer* buf) {
     );
 
     auto indexCount = static_cast<uint32_t>(indices_.size() / 2);
-    if (watTextures_.empty()) {
+    if (!watTextures_.empty()) {
         indexCount = static_cast<uint32_t>(indices_.size());
     }
     commandBuffers_[currentFrame_].drawIndexed(indexCount, 1, 0, 0, 0);
@@ -734,6 +734,7 @@ void VkRenderer::cleanup() {
 
         // Cleanup resources
         cleanupSwapChain();
+        ANativeWindow_release(mediaWindow_);
 
         initialized = false;
     }

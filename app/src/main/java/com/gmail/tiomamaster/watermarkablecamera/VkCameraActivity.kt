@@ -5,12 +5,12 @@ import android.media.MediaRecorder
 import android.media.MediaRecorder.OutputFormat
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
 import android.util.Log
 import android.view.KeyEvent
 import android.view.Surface
 import android.view.View
 import android.view.WindowManager
+import androidx.annotation.RequiresApi
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -20,7 +20,6 @@ import com.gmail.tiomamaster.watermarkablecamera.databinding.WatermarkBinding
 import com.google.androidgamesdk.GameActivity
 import java.io.File
 import kotlin.math.roundToInt
-import kotlin.system.exitProcess
 
 class VkCameraActivity : GameActivity() {
 
@@ -54,14 +53,6 @@ class VkCameraActivity : GameActivity() {
 
         resolution = Resolution.entries[intent.getIntExtra(MainActivity.EXTRA_RESOLUTION, 1)]
 
-        Handler(mainLooper).postDelayed({
-            setupWatermark()
-//            val filename = "${System.currentTimeMillis()}.mp4"
-//            val dir = /*getExternalFilesDir(null)*/"/sdcard/DCIM/Camera"
-//            initRecorder(File("$dir/$filename"), 720, 1280, 0)
-            setMediaSurface(mediaSurface)
-        }, 1000)
-
 //        var i = 0
 //        fixedRateTimer(period = 1000, initialDelay = 1500) {
 //            watermarkText.text = "${++i}"
@@ -81,20 +72,23 @@ class VkCameraActivity : GameActivity() {
         Log.i(TAG, "Called onResume")
     }
 
-    private fun setupWatermark() {
-        watBinding = WatermarkBinding.inflate(layoutInflater)
-        with(watBinding.root) {
-            surface = getWatermarkSurface()
-            val widthMeasureSpec =
-                View.MeasureSpec.makeMeasureSpec(mSurfaceView.width, View.MeasureSpec.EXACTLY)
-            val heightMeasureSpec =
-                View.MeasureSpec.makeMeasureSpec(mSurfaceView.height, View.MeasureSpec.EXACTLY)
-            this.widthMeasureSpec = widthMeasureSpec
-            this.heightMeasureSpec = heightMeasureSpec
-            update()
+    private fun setupWatermark(watSurface: Surface) {
+        runOnUiThread {
+            watBinding = WatermarkBinding.inflate(layoutInflater)
+            with(watBinding.root) {
+                surface = watSurface
+                val widthMeasureSpec =
+                    View.MeasureSpec.makeMeasureSpec(mSurfaceView.width, View.MeasureSpec.EXACTLY)
+                val heightMeasureSpec =
+                    View.MeasureSpec.makeMeasureSpec(mSurfaceView.height, View.MeasureSpec.EXACTLY)
+                this.widthMeasureSpec = widthMeasureSpec
+                this.heightMeasureSpec = heightMeasureSpec
+                update()
+            }
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.S)
     private fun initRecorder(
         saveTo: File,
         desiredWidth: Int,
@@ -125,7 +119,7 @@ class VkCameraActivity : GameActivity() {
     }
 
     fun startRecording(): Boolean = kotlin.runCatching {
-        nativeStartStopRecording()
+//        nativeStartStopRecording()
         mediaRecorder.start()
         recording = true
         true
@@ -137,7 +131,7 @@ class VkCameraActivity : GameActivity() {
 
     fun stopRecording(): Boolean = if (recording) {
         kotlin.runCatching {
-            nativeStartStopRecording()
+//            nativeStartStopRecording()
             mediaRecorder.stop()
             recording = false
             true
@@ -203,13 +197,11 @@ class VkCameraActivity : GameActivity() {
 //        exitProcess(0)
     }
 
-    private external fun getWatermarkSurface(): Surface
-    private external fun setMediaSurface(surface: Surface)
-    private external fun nativeStartStopRecording()
+//    private external fun nativeStartStopRecording()
 
     private companion object {
         init {
-            System.loadLibrary("WatermarkableCameraJNI")
+            System.loadLibrary("VkWatCam")
         }
 
         val TAG: String = VkCameraActivity::class.java.simpleName
