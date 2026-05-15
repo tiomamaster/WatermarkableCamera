@@ -12,7 +12,6 @@ using namespace camera;
 using namespace camera::util;
 
 struct AppState {
-    android_app* androidApp = nullptr;
     VkRenderer* vkRenderer = nullptr;
     CameraManager* camMgr = nullptr;
     bool canRender = false;
@@ -27,7 +26,6 @@ struct Surface {
     static constexpr auto Name() { return "android/view/Surface"; }
 };
 
-VkRenderer* vkApp;
 static const jni::Class<VkCameraActivity>* actClass = nullptr;
 
 /**
@@ -44,7 +42,7 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
         case APP_CMD_INIT_WINDOW:
             // The window is being shown, get it ready.
             logI("Called - APP_CMD_INIT_WINDOW");
-            if (appState->androidApp->window != nullptr) {
+            if (app->window != nullptr) {
                 logI("Init camera engine");
                 appState->camMgr->startPreview(true);
 
@@ -73,7 +71,7 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
                     ANativeWindow* mediaWindow = ANativeWindow_fromSurface(
                         &*env, jni::Unwrap(mediaSurface.release())
                     );
-                    vkApp->setMediaWindow(mediaWindow);
+                    appState->vkRenderer->setMediaWindow(mediaWindow);
                 }
                 appState->canRender = true;
             }
@@ -94,7 +92,7 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
     }
 }
 
-void drawFrame(AImage* image, bool isCam) {
+void drawFrame(VkRenderer& vkRenderer, AImage* image, bool isCam) {
     if (!image) return;
 
     // logI("Next image acquired");
@@ -112,9 +110,9 @@ void drawFrame(AImage* image, bool isCam) {
     // logI("Buffer %p acquired by vk renderer", hwBuffer);
 
     if (isCam) {
-        vkApp->camHwBufferToTexture(hwBuffer);
+        vkRenderer.camHwBufferToTexture(hwBuffer);
     } else {
-        vkApp->watHwBufferToTexture(hwBuffer);
+        vkRenderer.watHwBufferToTexture(hwBuffer);
     }
 
     AHardwareBuffer_release(hwBuffer);
@@ -127,8 +125,7 @@ void android_main(android_app* app) {
 
     AppState appState;
 
-    VkRenderer vulkanApplication;
-    vkApp = &vulkanApplication;
+    VkRenderer vkRenderer;
 
     ImageReader cameraReader(1920, 1080, AIMAGE_FORMAT_YUV_420_888);
     ImageReader watermarkReader(1080, 1920, AIMAGE_FORMAT_RGBA_8888);
@@ -150,8 +147,25 @@ void android_main(android_app* app) {
         )
     );
 
-    appState.androidApp = app;
-    appState.vkRenderer = vkApp;
+    // start/stop video recording
+    jni::RegisterNatives(
+        *env,
+        **actClass,
+        jni::MakeNativeMethod(
+            "nativeStartRecording",
+            [&](jni::JNIEnv&, jni::Object<VkCameraActivity>&) {
+                vkRenderer.startRecording();
+            }
+        ),
+        jni::MakeNativeMethod(
+            "nativeStopRecording",
+            [&](jni::JNIEnv&, jni::Object<VkCameraActivity>&) {
+                vkRenderer.stopRecording();
+            }
+        )
+    );
+
+    appState.vkRenderer = &vkRenderer;
     appState.camMgr = &cameraManager;
     app->userData = &appState;
     app->onAppCmd = handleAppCommand;
@@ -169,8 +183,8 @@ void android_main(android_app* app) {
             }
         }
 
-        drawFrame(cameraReader.getNextImage(), true);
-        drawFrame(watermarkReader.getNextImage(), false);
+        drawFrame(vkRenderer, cameraReader.getNextImage(), true);
+        drawFrame(vkRenderer, watermarkReader.getNextImage(), false);
     }
 }
 

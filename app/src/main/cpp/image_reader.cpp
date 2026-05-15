@@ -39,10 +39,10 @@ void ImageReader::imageCallback(AImageReader* reader) {
     logAssert(status == AMEDIA_OK, "failed to get the media format");
     if (format == AIMAGE_FORMAT_YUV_420_888) {
         // TODO: add logic
-        logI(
-            "ImageReader::imageCallback called for AIMAGE_FORMAT_YUV_420_888 "
-            "format"
-        );
+        // logI(
+        //     "ImageReader::imageCallback called for AIMAGE_FORMAT_YUV_420_888
+        //     " "format"
+        // );
     }
 }
 

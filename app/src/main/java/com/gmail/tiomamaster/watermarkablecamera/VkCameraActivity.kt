@@ -119,9 +119,9 @@ class VkCameraActivity : GameActivity() {
     }
 
     fun startRecording(): Boolean = kotlin.runCatching {
-//        nativeStartStopRecording()
-        mediaRecorder.start()
-        recording = true
+        nativeStartRecording()
+//        mediaRecorder.start()
+//        recording = true
         true
     }.onFailure {
         recording = false
@@ -131,9 +131,9 @@ class VkCameraActivity : GameActivity() {
 
     fun stopRecording(): Boolean = if (recording) {
         kotlin.runCatching {
-//            nativeStartStopRecording()
-            mediaRecorder.stop()
-            recording = false
+            nativeStopRecording()
+//            mediaRecorder.stop()
+//            recording = false
             true
         }.onFailure {
             mediaRecorder.release()
@@ -197,7 +197,8 @@ class VkCameraActivity : GameActivity() {
 //        exitProcess(0)
     }
 
-//    private external fun nativeStartStopRecording()
+    private external fun nativeStartRecording()
+    private external fun nativeStopRecording()
 
     private companion object {
         init {

@@ -435,7 +435,7 @@ void VkRenderer::camHwBufferToTexture(AHardwareBuffer* buf) {
 
     semaphoreIndex_ = (semaphoreIndex_ + 1) % imageAvailableSemaphores_.size();
 
-    if (isRecording_) {
+    if (/*isRecording_*/ false) {
         while (vk::Result::eTimeout ==
                device_.waitForFences(
                    *mediaInFlightFences_[currentFrame_], vk::True, FENCE_TIMEOUT
@@ -710,6 +710,15 @@ void VkRenderer::watHwBufferToTexture(AHardwareBuffer* buf) {
     // };
 
     device_.updateDescriptorSets(descriptorWrites, nullptr);
+}
+
+void VkRenderer::startRecording() {
+    logI("startRecording called");
+    isRecording_ = true;
+}
+void VkRenderer::stopRecording() {
+    logI("stopRecording called");
+    isRecording_ = false;
 }
 
 void VkRenderer::reset(ANativeWindow* newWindow, AAssetManager* newManager) {

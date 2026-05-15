@@ -63,6 +63,8 @@ class VkRenderer {
     void setMediaWindow(ANativeWindow* win);
     void camHwBufferToTexture(AHardwareBuffer* buf);
     void watHwBufferToTexture(AHardwareBuffer* buf);
+    void startRecording();
+    void stopRecording();
     void reset(ANativeWindow* newWindow, AAssetManager* newManager);
     void cleanup();
 
