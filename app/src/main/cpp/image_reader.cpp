@@ -1,6 +1,7 @@
 #include "image_reader.hpp"
 
 #include "util.hpp"
+#include "vulkan_renderer.hpp"
 
 using namespace camera::util;
 
@@ -10,8 +11,10 @@ void onImageAvailable(void* ctx, AImageReader* reader) {
     reinterpret_cast<ImageReader*>(ctx)->imageCallback(reader);
 }
 
-ImageReader::ImageReader(int32_t width, int32_t height, AIMAGE_FORMATS format)
-    : reader_(nullptr) {
+ImageReader::ImageReader(
+    int32_t width, int32_t height, AIMAGE_FORMATS format, VkRenderer& vkRenderer
+)
+    : reader_(nullptr), vkRenderer_(vkRenderer) {
     media_status_t status = AImageReader_newWithUsage(
         width,
         height,
@@ -30,20 +33,38 @@ ImageReader::ImageReader(int32_t width, int32_t height, AIMAGE_FORMATS format)
 
 ImageReader::~ImageReader() {
     logAssert(reader_, "reader_ is null");
+    AImageReader_setImageListener(reader_, NULL);
     AImageReader_delete(reader_);
 }
 
-void ImageReader::imageCallback(AImageReader* reader) {
+void ImageReader::imageCallback(AImageReader*) {
     int32_t format;
-    media_status_t status = AImageReader_getFormat(reader, &format);
+    media_status_t status = AImageReader_getFormat(reader_, &format);
     logAssert(status == AMEDIA_OK, "failed to get the media format");
-    if (format == AIMAGE_FORMAT_YUV_420_888) {
-        // TODO: add logic
-        // logI(
-        //     "ImageReader::imageCallback called for AIMAGE_FORMAT_YUV_420_888
-        //     " "format"
-        // );
+    auto image = getNextImage();
+    if (!image) return;
+
+    AHardwareBuffer* hwBuffer;
+    status = AImage_getHardwareBuffer(image, &hwBuffer);
+
+    if (status != AMEDIA_OK) {
+        logE("Can't acquire hw buffer");
+        AImage_delete(image);
+        return;
     }
+
+    AHardwareBuffer_acquire(hwBuffer);
+
+    if (format == AIMAGE_FORMAT_YUV_420_888) {
+        vkRenderer_.camHwBufferToTexture(hwBuffer);
+    } else if (format == AIMAGE_FORMAT_RGBA_8888) {
+        vkRenderer_.watHwBufferToTexture(hwBuffer);
+    } else {
+        logI("Unknown format");
+    }
+
+    AHardwareBuffer_release(hwBuffer);
+    AImage_delete(image);
 }
 
 ANativeWindow* ImageReader::getNativeWindow() {

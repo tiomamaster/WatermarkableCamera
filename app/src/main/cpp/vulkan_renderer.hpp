@@ -2,6 +2,7 @@
 
 #include <android/asset_manager.h>
 
+#include <atomic>
 #include <cstdint>
 #include <glm/glm.hpp>
 
@@ -57,7 +58,7 @@ struct UniformBufferObject {
 
 class VkRenderer {
   public:
-    bool initialized = false;
+    std::atomic_bool initialized = false;
 
     void init();
     void setMediaWindow(ANativeWindow* win);

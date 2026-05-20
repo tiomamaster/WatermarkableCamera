@@ -4,11 +4,18 @@
 
 #include <cstdint>
 
+#include "vulkan_renderer.hpp"
+
 namespace camera {
 
 class ImageReader {
   public:
-    ImageReader(int32_t width, int32_t height, AIMAGE_FORMATS format);
+    ImageReader(
+        int32_t width,
+        int32_t height,
+        AIMAGE_FORMATS format,
+        VkRenderer& vkRenderer
+    );
     ~ImageReader();
 
     friend void onImageAvailable(void* ctx, AImageReader* reader);
@@ -33,6 +40,7 @@ class ImageReader {
     static constexpr int32_t MAX_BUF_COUNT = 2;
 
     AImageReader* reader_;
+    VkRenderer& vkRenderer_;
 
     void imageCallback(AImageReader* reader);
 };

@@ -53,7 +53,7 @@ struct CameraId {
 
 class CameraManager {
   public:
-    CameraManager(ANativeWindow* previewWindow);
+    explicit CameraManager(ANativeWindow* previewWindow);
     ~CameraManager();
 
     void onCameraStatusChanged(const char* id, bool available);

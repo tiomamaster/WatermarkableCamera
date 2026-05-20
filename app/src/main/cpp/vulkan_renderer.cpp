@@ -163,7 +163,8 @@ void VkRenderer::setMediaWindow(ANativeWindow* win) {
 }
 
 void VkRenderer::camHwBufferToTexture(AHardwareBuffer* buf) {
-    if (watTextures_.empty()) return;
+    // todo: not sure about initialized check, maybe use mutex for sync
+    if (watTextures_.empty() || !initialized) return;
 
     while (vk::Result::eTimeout ==
            device_.waitForFences(
@@ -566,6 +567,9 @@ void VkRenderer::camHwBufferToTexture(AHardwareBuffer* buf) {
 }
 
 void VkRenderer::watHwBufferToTexture(AHardwareBuffer* buf) {
+    // todo: not sure about initialized check, maybe use mutex for sync
+    if (!initialized) return;
+
     device_.waitIdle();
 
     if (watTextures_.empty()) {
@@ -736,6 +740,8 @@ void VkRenderer::reset(ANativeWindow* newWindow, AAssetManager* newManager) {
 
 void VkRenderer::cleanup() {
     if (initialized) {
+        initialized = false;
+
         // Wait for device to finish operations
         if (*device_) {
             device_.waitIdle();
@@ -744,8 +750,6 @@ void VkRenderer::cleanup() {
         // Cleanup resources
         cleanupSwapChain();
         ANativeWindow_release(mediaWindow_);
-
-        initialized = false;
     }
 }
 
@@ -1373,6 +1377,7 @@ void VkRenderer::createDescriptorPool() {
     };
 
     vk::DescriptorPoolCreateInfo poolInfo{
+        .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
         .maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
         .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
         .pPoolSizes = poolSizes.data()
