@@ -13,8 +13,9 @@ using namespace camera::util;
 
 struct AppState {
     VkRenderer* vkRenderer = nullptr;
-    ImageReader* watReader = nullptr;
-    CameraManager* camMgr = nullptr;
+    ImageReader camReader;
+    ImageReader watReader;
+    std::unique_ptr<CameraManager> camMgr = nullptr;
 };
 
 struct VkCameraActivity {
@@ -36,6 +37,18 @@ void init(AppState* appState, ANativeWindow* window, GameActivity* activity) {
         logI("Init renderer, image readers and camera manager");
         appState->vkRenderer->init();
 
+        auto w = ANativeWindow_getWidth(window);
+        auto h = ANativeWindow_getHeight(window);
+        logI("ANativeWindow width = %i height = %i", w, h);
+        // todo: maybe use lambdas as callbacks instead passing vkRenderer
+        appState->camReader =
+            ImageReader(h, w, AIMAGE_FORMAT_YUV_420_888, appState->vkRenderer);
+        appState->watReader =
+            ImageReader(w, h, AIMAGE_FORMAT_RGBA_8888, appState->vkRenderer);
+        appState->camMgr = std::make_unique<CameraManager>(
+            appState->camReader.getNativeWindow()
+        );
+
         // get mediaSurface
         auto env = jni::AttachCurrentThread(*activity->vm);
         auto actObj = jni::Global<jni::Object<VkCameraActivity>>(
@@ -47,10 +60,13 @@ void init(AppState* appState, ANativeWindow* window, GameActivity* activity) {
         ANativeWindow* mediaWindow =
             ANativeWindow_fromSurface(&*env, jni::Unwrap(mediaSurface.get()));
         appState->vkRenderer->setMediaWindow(mediaWindow);
+        w = ANativeWindow_getWidth(mediaWindow);
+        h = ANativeWindow_getHeight(mediaWindow);
+        logI("Media ANativeWindow width = %i height = %i", w, h);
 
         //  setupWatermark
         jobject surface = ANativeWindow_toSurface(
-            &*env, appState->watReader->getNativeWindow()
+            &*env, appState->watReader.getNativeWindow()
         );
         actObj.Call(
             *env,
@@ -65,7 +81,7 @@ void init(AppState* appState, ANativeWindow* window, GameActivity* activity) {
         actObj.release();
     }
 
-    appState->camMgr->startPreview(true);
+    appState->camMgr->startPreview();
 }
 
 // Called by the Android runtime whenever events happen so the app can react to
@@ -88,12 +104,14 @@ static void handleAppCommand(android_app* app, int32_t cmd) {
             // The window is being hidden or closed, clean it up.
             logI("Called - APP_CMD_TERM_WINDOW");
             // todo: terminate camera, this call probably do this termination
-            appState->camMgr->startPreview(false);
+            appState->camMgr->stopPreview();
             appState->vkRenderer->cleanup();
             break;
         case APP_CMD_DESTROY:
             // The window is being hidden or closed, clean it up.
             logI("Destroying");
+            appState->camReader.removeImageCallback();
+            appState->watReader.removeImageCallback();
         default:
             break;
     }
@@ -105,10 +123,6 @@ void android_main(android_app* app) {
 
     AppState appState;
     VkRenderer vkRenderer;
-    // todo: maybe use lambdas as callbacks instead passing vkRenderer
-    ImageReader camReader(1920, 1080, AIMAGE_FORMAT_YUV_420_888, vkRenderer);
-    ImageReader watReader(1080, 1920, AIMAGE_FORMAT_RGBA_8888, vkRenderer);
-    CameraManager cameraManager(camReader.getNativeWindow());
 
     auto env = jni::AttachCurrentThread(*app->activity->vm);
 
@@ -131,8 +145,6 @@ void android_main(android_app* app) {
     );
 
     appState.vkRenderer = &vkRenderer;
-    appState.watReader = &watReader;
-    appState.camMgr = &cameraManager;
     app->userData = &appState;
     app->onAppCmd = handleAppCommand;
 

@@ -1,9 +1,5 @@
 #include "camera_manager.hpp"
 
-#include <camera/NdkCameraError.h>
-#include <camera/NdkCameraManager.h>
-#include <unistd.h>
-
 #include "util.hpp"
 
 using namespace camera::util;
@@ -114,7 +110,7 @@ CameraManager::CameraManager(ANativeWindow* previewWindow)
     logAssert(activeCameraId_.size(), "unknown ActiveCameraIdx");
 
     // Create back facing camera device
-    static ACameraDevice_StateCallbacks cameraDeviceListener = {
+    ACameraDevice_StateCallbacks cameraDeviceListener{
         .context = this,
         .onDisconnected = ::camera::onDisconnected,
         .onError = ::camera::onError
@@ -126,14 +122,13 @@ CameraManager::CameraManager(ANativeWindow* previewWindow)
         &cameras_[activeCameraId_].device_
     ));
 
-    static ACameraManager_AvailabilityCallbacks callbacks{
+    cameraMgrListener = {
         .context = this,
         .onCameraAvailable = ::camera::onCameraAvailable,
         .onCameraUnavailable = ::camera::onCameraUnavailable,
     };
-    cameraMgrListener = &callbacks;
     callCamera(ACameraManager_registerAvailabilityCallback(
-        cameraMgr_, cameraMgrListener
+        cameraMgr_, &cameraMgrListener
     ));
 
     valid_ = true;
@@ -143,10 +138,7 @@ CameraManager::CameraManager(ANativeWindow* previewWindow)
 
 CameraManager::~CameraManager() {
     valid_ = false;
-    // stop session if it is on:
-    if (captureSessionState_ == CaptureSessionState::ACTIVE) {
-        ACameraCaptureSession_stopRepeating(captureSession_);
-    }
+
     ACameraCaptureSession_close(captureSession_);
 
     for (auto& req : requests_) {
@@ -161,8 +153,8 @@ CameraManager::~CameraManager() {
 
         ANativeWindow_release(req.outputNativeWindow_);
     }
-
     requests_.resize(0);
+
     ACaptureSessionOutputContainer_free(outputContainer_);
 
     for (auto& cam : cameras_) {
@@ -173,7 +165,7 @@ CameraManager::~CameraManager() {
     cameras_.clear();
     if (cameraMgr_) {
         callCamera(ACameraManager_unregisterAvailabilityCallback(
-            cameraMgr_, cameraMgrListener
+            cameraMgr_, &cameraMgrListener
         ));
         ACameraManager_delete(cameraMgr_);
         cameraMgr_ = nullptr;
@@ -252,7 +244,7 @@ void CameraManager::createSession(ANativeWindow* previewWindow) {
 
     // Create a capture session for the given preview request
     captureSessionState_ = CaptureSessionState::READY;
-    static ACameraCaptureSession_stateCallbacks sessionListener = {
+    ACameraCaptureSession_stateCallbacks sessionListener{
         .context = this,
         .onClosed = ::camera::onSessionClosed,
         .onReady = ::camera::onSessionReady,
@@ -303,19 +295,20 @@ bool CameraManager::getSensorOrientation(int32_t* facing, int32_t* angle) {
     return true;
 }
 
-void CameraManager::startPreview(bool start) {
-    if (start) {
-        callCamera(ACameraCaptureSession_setRepeatingRequest(
-            captureSession_,
-            nullptr,
-            1,
-            &requests_[PREVIEW_REQUEST_IDX].request_,
-            nullptr
-        ));
-    } else if (!start && captureSessionState_ == CaptureSessionState::ACTIVE) {
+void CameraManager::startPreview() {
+    callCamera(ACameraCaptureSession_setRepeatingRequest(
+        captureSession_,
+        nullptr,
+        1,
+        &requests_[PREVIEW_REQUEST_IDX].request_,
+        nullptr
+    ));
+}
+
+void CameraManager::stopPreview() {
+    if (captureSessionState_ == CaptureSessionState::ACTIVE) {
+        logI("Stop camera preview");
         ACameraCaptureSession_stopRepeating(captureSession_);
-    } else {
-        logAssert(false, "conflict states");
     }
 }
 

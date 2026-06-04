@@ -60,7 +60,8 @@ class CameraManager {
     void onDisconnected(ACameraDevice* dev);
     void onError(ACameraDevice* dev, int err);
     void onSessionState(ACameraCaptureSession* ses, CaptureSessionState state);
-    void startPreview(bool start);
+    void startPreview();
+    void stopPreview();
 
   private:
     ACameraManager* cameraMgr_;
@@ -73,9 +74,9 @@ class CameraManager {
 
     ACaptureSessionOutputContainer* outputContainer_;
     ACameraCaptureSession* captureSession_;
-    CaptureSessionState captureSessionState_;
+    volatile CaptureSessionState captureSessionState_;
 
-    ACameraManager_AvailabilityCallbacks* cameraMgrListener;
+    ACameraManager_AvailabilityCallbacks cameraMgrListener;
 
     volatile bool valid_;
 

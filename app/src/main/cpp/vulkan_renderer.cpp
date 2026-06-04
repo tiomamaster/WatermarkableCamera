@@ -1,7 +1,5 @@
 #include "vulkan_renderer.hpp"
 
-#include <android/native_window.h>
-
 #include "util.hpp"
 
 #define GLM_FORCE_RADIANS
@@ -37,6 +35,7 @@ void VkRenderer::init() {
     createSyncObjects();
 
     initialized = true;
+    canRender = true;
 }
 
 void VkRenderer::setMediaWindow(ANativeWindow* win) {
@@ -163,8 +162,8 @@ void VkRenderer::setMediaWindow(ANativeWindow* win) {
 }
 
 void VkRenderer::camHwBufferToTexture(AHardwareBuffer* buf) {
-    // todo: not sure about initialized check, maybe use mutex for sync
-    if (watTextures_.empty() || !initialized) return;
+    std::lock_guard<std::mutex> guard(renderMutex_);
+    if (watTextures_.empty() || !initialized || !canRender) return;
 
     while (vk::Result::eTimeout ==
            device_.waitForFences(
@@ -567,8 +566,8 @@ void VkRenderer::camHwBufferToTexture(AHardwareBuffer* buf) {
 }
 
 void VkRenderer::watHwBufferToTexture(AHardwareBuffer* buf) {
-    // todo: not sure about initialized check, maybe use mutex for sync
-    if (!initialized) return;
+    std::lock_guard<std::mutex> guard(renderMutex_);
+    if (!initialized || !canRender) return;
 
     device_.waitIdle();
 
@@ -735,12 +734,14 @@ void VkRenderer::reset(ANativeWindow* newWindow, AAssetManager* newManager) {
         createSwapChain();
         createImageViews();
         createFramebuffers();
+        canRender = true;
     }
 }
 
 void VkRenderer::cleanup() {
+    std::lock_guard<std::mutex> guard(renderMutex_);
     if (initialized) {
-        initialized = false;
+        canRender = false;
 
         // Wait for device to finish operations
         if (*device_) {
@@ -749,7 +750,6 @@ void VkRenderer::cleanup() {
 
         // Cleanup resources
         cleanupSwapChain();
-        ANativeWindow_release(mediaWindow_);
     }
 }
 

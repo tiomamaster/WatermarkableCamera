@@ -53,6 +53,10 @@ class VkCameraActivity : GameActivity() {
 
         resolution = Resolution.entries[intent.getIntExtra(MainActivity.EXTRA_RESOLUTION, 1)]
 
+//        val filename = "VkWatCam_${System.currentTimeMillis()}.mp4"
+//        val dir = "/sdcard/DCIM/Camera"
+//        initRecorder(File("$dir/$filename"), resolution.size.width, resolution.size.height, 0)
+
 //        var i = 0
 //        fixedRateTimer(period = 1000, initialDelay = 1500) {
 //            watermarkText.text = "${++i}"
@@ -72,6 +76,7 @@ class VkCameraActivity : GameActivity() {
         Log.i(TAG, "Called onResume")
     }
 
+    // Called from cpp
     private fun setupWatermark(watSurface: Surface) {
         runOnUiThread {
             watBinding = WatermarkBinding.inflate(layoutInflater)

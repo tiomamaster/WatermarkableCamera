@@ -11,8 +11,14 @@ void onImageAvailable(void* ctx, AImageReader* reader) {
     reinterpret_cast<ImageReader*>(ctx)->imageCallback(reader);
 }
 
+void swap(ImageReader& first, ImageReader& second) noexcept {
+    using std::swap;
+    swap(first.reader_, second.reader_);
+    swap(first.vkRenderer_, second.vkRenderer_);
+}
+
 ImageReader::ImageReader(
-    int32_t width, int32_t height, AIMAGE_FORMATS format, VkRenderer& vkRenderer
+    int32_t width, int32_t height, AIMAGE_FORMATS format, VkRenderer* vkRenderer
 )
     : reader_(nullptr), vkRenderer_(vkRenderer) {
     media_status_t status = AImageReader_newWithUsage(
@@ -24,15 +30,21 @@ ImageReader::ImageReader(
         &reader_
     );
     logAssert(reader_ && status == AMEDIA_OK, "failed to create ImageReader");
+    setImageCallback();
+}
 
-    AImageReader_ImageListener listener{
-        .context = this, .onImageAvailable = onImageAvailable
-    };
-    AImageReader_setImageListener(reader_, &listener);
+ImageReader::ImageReader(ImageReader&& other) noexcept : ImageReader() {
+    swap(*this, other);
+}
+
+ImageReader& ImageReader::operator=(ImageReader&& other) noexcept {
+    swap(*this, other);
+    setImageCallback();
+    return *this;
 }
 
 ImageReader::~ImageReader() {
-    logAssert(reader_, "reader_ is null");
+    if (!reader_) return;
     AImageReader_setImageListener(reader_, NULL);
     AImageReader_delete(reader_);
 }
@@ -56,9 +68,9 @@ void ImageReader::imageCallback(AImageReader*) {
     AHardwareBuffer_acquire(hwBuffer);
 
     if (format == AIMAGE_FORMAT_YUV_420_888) {
-        vkRenderer_.camHwBufferToTexture(hwBuffer);
+        vkRenderer_->camHwBufferToTexture(hwBuffer);
     } else if (format == AIMAGE_FORMAT_RGBA_8888) {
-        vkRenderer_.watHwBufferToTexture(hwBuffer);
+        vkRenderer_->watHwBufferToTexture(hwBuffer);
     } else {
         logI("Unknown format");
     }
@@ -67,12 +79,23 @@ void ImageReader::imageCallback(AImageReader*) {
     AImage_delete(image);
 }
 
+void ImageReader::setImageCallback() {
+    AImageReader_ImageListener listener{
+        .context = this, .onImageAvailable = onImageAvailable
+    };
+    AImageReader_setImageListener(reader_, &listener);
+}
+
 ANativeWindow* ImageReader::getNativeWindow() {
     logAssert(reader_, "reader_ is null");
     ANativeWindow* nativeWindow;
     media_status_t status = AImageReader_getWindow(reader_, &nativeWindow);
     logAssert(status == AMEDIA_OK, "could not get ANativeWindow");
     return nativeWindow;
+}
+
+void ImageReader::removeImageCallback() {
+    AImageReader_setImageListener(reader_, NULL);
 }
 
 AImage* ImageReader::getNextImage() {

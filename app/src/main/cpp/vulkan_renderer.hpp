@@ -3,7 +3,6 @@
 #include <android/asset_manager.h>
 
 #include <atomic>
-#include <cstdint>
 #include <glm/glm.hpp>
 
 // clang-format off
@@ -59,6 +58,7 @@ struct UniformBufferObject {
 class VkRenderer {
   public:
     std::atomic_bool initialized = false;
+    std::atomic_bool canRender = false;
 
     void init();
     void setMediaWindow(ANativeWindow* win);
@@ -104,6 +104,7 @@ class VkRenderer {
     bool framebufferResized_ = false;
 
     std::atomic_bool isRecording_ = false;
+    std::mutex renderMutex_;
 
     // Vulkan objects
     vk::raii::Context context_;
