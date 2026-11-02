@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.androidApplication)
-    alias(libs.plugins.kotlinAndroid)
 }
 
 kotlin {
@@ -41,6 +40,7 @@ android {
         }
     }
     buildFeatures {
+        buildConfig = true
         prefab = true
         viewBinding = true
     }

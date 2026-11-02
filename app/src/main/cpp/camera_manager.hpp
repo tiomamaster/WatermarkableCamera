@@ -18,6 +18,8 @@ enum class CaptureSessionState : int32_t {
     MAX_STATE
 };
 
+// todo: consider using enum class or remove this enum since we only interested
+// in PREVIEW_REQUEST_IDX
 enum PREVIEW_INDICES {
     PREVIEW_REQUEST_IDX = 0,
     JPG_CAPTURE_REQUEST_IDX,

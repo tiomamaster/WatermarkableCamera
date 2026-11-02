@@ -2,24 +2,22 @@
 versionCode = "1"
 versionName = "0.1"
 
-kotlin = "2.2.21"
-targetSdk = "36"
-compileSdk = "36"
+targetSdk = "37"
+compileSdk = "37"
 minSdk = "26"
-androidGradlePlugin = "8.13.1"
-androidAppCompat = "1.7.1"
-androidCoreKtx = "1.17.0"
-androidConstraintLayout = "2.2.1"
-androidMaterial = "1.13.0"
-androidGamesActivity = "4.0.0"
+androidGradlePlugin = "9.5.0"
+androidAppCompat = "1.8.0"
+androidCoreKtx = "1.19.1"
+androidConstraintLayout = "2.2.2"
+androidMaterial = "1.14.0"
+androidGamesActivity = "4.4.2"
 
 [libraries]
-android-appCompat = { module = "androidx.appcompat:appcompat" ,version.ref = "androidAppCompat"}
-android-coreKtx = { module = "androidx.core:core-ktx" ,version.ref = "androidCoreKtx"}
-android-constraintLayout = { module = "androidx.constraintlayout:constraintlayout" ,version.ref = "androidConstraintLayout"}
+android-appCompat = { module = "androidx.appcompat:appcompat", version.ref = "androidAppCompat" }
+android-coreKtx = { module = "androidx.core:core-ktx", version.ref = "androidCoreKtx" }
+android-constraintLayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "androidConstraintLayout" }
 android-material = { module = "com.google.android.material:material", version.ref = "androidMaterial" }
 android-gamesActivity = { module = "androidx.games:games-activity", version.ref = "androidGamesActivity" }
 
 [plugins]
-kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 androidApplication = { id = "com.android.application", version.ref = "androidGradlePlugin" }
